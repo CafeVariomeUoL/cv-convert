@@ -66,4 +66,7 @@ library
                 quickjs/libunicode.c,
                 quickjs/quickjs.h,
                 quickjs/quickjs.c
-  cc-options: -fPIC -D_GNU_SOURCE -DCONFIG_VERSION="2020-04-12" -DCONFIG_BIGNUM -O2
+  cc-options: -fPIC -static -D_GNU_SOURCE -DCONFIG_VERSION="2020-04-12" -DCONFIG_BIGNUM -O2
+
+  ghc-options: -fPIC
+  ld-options: -static

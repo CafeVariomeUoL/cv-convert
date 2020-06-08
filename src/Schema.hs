@@ -9,14 +9,14 @@ import Data.String.Interpolate ( i )
 import Data.Shorten
 import Data.List.NonEmpty(toList)
 import Data.List.Split(splitOn)
-import Data.List(intercalate, dropWhile)
+import Data.List(intercalate)
 import Data.Char (isSpace)
 import qualified Data.Set as Set
 
 compileSchema :: Schema -> Either SchemaInvalid (Value -> [ValidatorFailure])
 compileSchema s = checkSchema (URISchemaMap HM.empty) (SchemaWithURI s Nothing)
 
-
+shortenLen :: Int
 shortenLen = 30
 
 
@@ -44,19 +44,19 @@ prettyValidatorFailure (FailureMinItems          (MinItemsInvalid (MinItems _Min
 prettyValidatorFailure (FailureUniqueItems       (UniqueItemsInvalid _VectorValue)) = [ [i|The array "#{trunc _VectorValue}" contains duplicate elements|] ]
 prettyValidatorFailure (FailureItems             (ItemsObjectInvalid _ListIndexValidatorFailure)) = 
     [ "The following object attributes are invalid:" ] ++
-        (concat $ map (\(i, errs) -> possiblyInline (" - " ++ show i ++ " :") $
+        (concat $ map (\(idx, errs) -> possiblyInline (" - " ++ show idx ++ " :") $
             concat (map ((map ("  " ++)) . prettyValidatorFailure) $ toList errs)
         ) $ toList _ListIndexValidatorFailure)
 prettyValidatorFailure (FailureItems             (ItemsArrayInvalid _ListIndexValidatorFailure)) = 
     [ "The following array elements are invalid:" ] ++
-        (concat $ map (\(i, errs) -> possiblyInline ("- " ++ show i ++ " :") $
+        (concat $ map (\(idx, errs) -> possiblyInline ("- " ++ show idx ++ " :") $
             concat (map ((map ("  " ++)) . prettyValidatorFailure) $ toList errs)
         ) $ toList _ListIndexValidatorFailure)
 prettyValidatorFailure (FailureAdditionalItems   (AdditionalItemsBoolInvalid _ListIndexValue)) = 
-    [ "This object contains additional attributes which are not specified in the schema:" ] ++ (map (\(idx, val) -> [i| - "#{idx}"|]) $ toList _ListIndexValue)
+    [ "This object contains additional attributes which are not specified in the schema:" ] ++ (map (\(idx, _) -> [i| - "#{idx}"|]) $ toList _ListIndexValue)
 prettyValidatorFailure (FailureAdditionalItems   (AdditionalItemsObjectInvalid _ListIndexValidatorFailure)) = 
     [ "The following additional object attributes are invalid:" ] ++
-        (concat $ map (\(i, errs) -> possiblyInline ("- \"" ++ show i ++ "\" : ") $
+        (concat $ map (\(idx, errs) -> possiblyInline ("- \"" ++ show idx ++ "\" : ") $
             concat (map ((map ("  " ++)) . prettyValidatorFailure) $ toList errs)
         ) $ toList _ListIndexValidatorFailure)
 prettyValidatorFailure (FailureMaxProperties     (MaxPropertiesInvalid (MaxProperties _MaxProperties) _MapTextValue)) = [ [i|The number of properties in "#{trunc _MapTextValue}" is greater than allowed: #{_MaxProperties}|] ]
@@ -92,7 +92,7 @@ prettyValidatorFailure (FailurePropertiesRelated (PropertiesRelatedInvalid _prIn
         mkPrInvalidAdditional Nothing = []
         mkPrInvalidAdditional (Just (APBoolInvalid _MapTextValue))
             | HM.size _MapTextValue > 0 = 
-                [ "This object contains additional attributes which are not specified in the schema:" ] ++ (map (\(idx, val) -> [i| - "#{idx}"|]) $ HM.toList _MapTextValue)
+                [ "This object contains additional attributes which are not specified in the schema:" ] ++ (map (\(idx, _) -> [i| - "#{idx}"|]) $ HM.toList _MapTextValue)
             | otherwise = []
         mkPrInvalidAdditional (Just (APObjectInvalid _MapTextListValidatorFailure))
             | HM.size _MapTextListValidatorFailure > 0 = [ "The following additional attributes are invalid:" ] ++
@@ -112,18 +112,19 @@ prettyValidatorFailure (FailureType  (TypeValidatorInvalid (TypeValidatorString 
 prettyValidatorFailure (FailureType  (TypeValidatorInvalid (TypeValidatorArray _SetSchemaType) _Value)) = [ [i|Expected #{encode _Value} to be of type #{intercalate "|" $ map prettySchemaType $ Set.toList _SetSchemaType}|] ]
 prettyValidatorFailure (FailureAllOf (AllOfInvalid _ListIndexValidatorFailure)) = 
     [ "allOf error:" ] ++
-        (concat $ map (\(i, errs) -> possiblyInline ("- \"" ++ show i ++ "\" :") $
+        (concat $ map (\(idx, errs) -> possiblyInline ("- \"" ++ show idx ++ "\" :") $
             concat (map ((map ("  " ++)) . prettyValidatorFailure) $ toList errs)
         ) $ toList _ListIndexValidatorFailure)
 prettyValidatorFailure (FailureAnyOf (AnyOfInvalid _ListIndexValidatorFailure)) = 
     [ "anyOf error:" ] ++
-        (concat $ map (\(i, errs) -> possiblyInline ("- \"" ++ show i ++ "\" :") $
+        (concat $ map (\(idx, errs) -> possiblyInline ("- \"" ++ show idx ++ "\" :") $
             concat (map ((map ("  " ++)) . prettyValidatorFailure) $ toList errs)
         ) $ toList _ListIndexValidatorFailure)
 prettyValidatorFailure (FailureOneOf f@(TooManySuccesses _ _)) = splitOn "\n" $ show f
 prettyValidatorFailure (FailureOneOf f@(NoSuccesses _ _)) = splitOn "\n" $ show f
 prettyValidatorFailure (FailureNot   f@(NotValidatorInvalid _ _)) = splitOn "\n" $ show f
 
+prettySchemaType :: SchemaType -> [Char]
 prettySchemaType SchemaObject = "Object"
 prettySchemaType SchemaArray = "Array"
 prettySchemaType SchemaString = "String"
@@ -132,5 +133,5 @@ prettySchemaType SchemaInteger = "Integer"
 prettySchemaType SchemaBoolean = "Boolean"
 prettySchemaType SchemaNull = "Null"
 
-
+pValidatorFailure :: ValidatorFailure -> [Char]
 pValidatorFailure = intercalate "\n" . prettyValidatorFailure

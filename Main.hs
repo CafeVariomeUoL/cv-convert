@@ -1,28 +1,24 @@
 {-# LANGUAGE ForeignFunctionInterface, OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric, RecordWildCards, FlexibleContexts, ScopedTypeVariables, MultiParamTypeClasses #-}
 
-import System.IO(openFile, IOMode(..), hPutStrLn, hClose)
-import Data.Scientific(isInteger)
-import Data.Aeson(Value(..), FromJSON(..), decode, toJSON, genericParseJSON, defaultOptions, constructorTagModifier, camelTo2)
+import System.IO(openFile, IOMode(..), Handle, hPutStrLn, hClose)
+import Data.Aeson(Value(..), ToJSON, FromJSON(..), decode, toJSON, genericParseJSON, defaultOptions, constructorTagModifier, camelTo2)
 import Data.Aeson.Encode.Pretty(encodePretty)
-import Data.Maybe(fromJust, fromMaybe)
-import Foreign.ForeignPtr(finalizeForeignPtr)
+import Data.Maybe(fromMaybe)
 import System.Environment (getArgs)
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text
-import qualified Data.Vector as V
 import GHC.Generics
-import Control.Monad.IO.Class(liftIO)
-import Control.Applicative((<|>))
-import Control.Monad(forM_, when)
+import Control.Monad.IO.Class(MonadIO, liftIO)
+import Control.Monad(when)
 import qualified Data.HashMap.Strict as HM
-import Control.Monad.Except(catchError, throwError)
+import Control.Monad.Except(MonadError, catchError, throwError)
+import Control.Monad.Reader(MonadReader)
 import Control.Lens.Combinators(ifor_, FoldableWithIndex, TraversableWithIndex, FunctorWithIndex)
 import Data.List(intercalate)
 import System.FilePath.Posix(takeExtension, (-<.>))
 import Data.Char(toLower)
-import Text.Pretty.Simple (pPrint)
 import Data.String.Conv(toS)
 import Data.Csv.Streaming(Records, decodeByName)
 
@@ -71,19 +67,26 @@ main = do
       Just Settings{..} -> do
         case compileSchema jsonSchema of
           Left e -> do
-            print "Invalid schema"
-            print e
+            putStrLn "Invalid schema"
+            putStrLn $ show e
           Right validator ->
             let fileType = fromMaybe (fromMaybe TXT $ readFileType $ takeExtension inputFile) openAs in 
             quickjsIO $ do
-              eval $ "rowFun = (row) => { " ++ processFunction ++ " }"
+              _ <- eval $ "rowFun = (row) => { " ++ processFunction ++ " }"
               let rowFun row = call "rowFun" [row] >>= fromJSValue_
               processFile rowFun validator inputFile fileType (fromMaybe LogToConsole onError) (fromMaybe 0 startFrom)
-      Nothing -> print "Invalid settings file"
-  else print "Not enough arguments supplied"
+      Nothing -> putStrLn "Invalid settings file"
+  else putStrLn "Not enough arguments supplied"
 
 
-
+processFile :: (MonadError String m, MonadIO m, MonadReader JSContextPtr m, ToJSON res) =>
+  (JSValueForeignPtr -> m res)
+  -> (res -> [ValidatorFailure])
+  -> FilePath
+  -> FileType
+  -> ErrorOpts
+  -> Int
+  -> m ()
 processFile rowFun validator fName fType onError startFromLine = do
   logFile <- liftIO $ case onError of
     LogToFile -> writeFile (fName -<.> "log") "" >> openFile (fName -<.> "log") AppendMode >>= return . Just
@@ -101,19 +104,47 @@ processFile rowFun validator fName fType onError startFromLine = do
     BS.hPutStr outputFile "\n]"
     hClose outputFile 
 
+
+processTxtFile :: (MonadError String m, MonadIO m, MonadReader JSContextPtr m, ToJSON res) =>
+  (JSValueForeignPtr -> m res)
+  -> (res -> [ValidatorFailure])
+  -> FilePath
+  -> Maybe Handle
+  -> ErrorOpts
+  -> Int
+  -> Handle
+  -> m ()
 processTxtFile rowFun validator fName logFile onError startFromLine outputFile = do
   file <- liftIO $ openFile fName ReadMode
   txt <- liftIO $ Text.hGetContents file
   ifor_ (Text.lines txt) $ \i l -> when (i >= startFromLine) $ do
     row <- toJSValue (Object $ HM.fromList [("i" , toJSON i), ("data" , toJSON l)])
     parse i row rowFun validator outputFile onError logFile
-  
+
+
+processXlsxFile :: (MonadError String m, MonadIO m, MonadReader JSContextPtr m, ToJSON res) =>
+  (JSValueForeignPtr -> m res)
+  -> (res -> [ValidatorFailure])
+  -> FilePath
+  -> Maybe Handle
+  -> ErrorOpts
+  -> Handle
+  -> m ()
 processXlsxFile rowFun validator fName logFile onError outputFile = do
   rows <- readXlsxFile fName
   ifor_ rows $ \i r -> do
     row <- toJSValue r
     parse i row rowFun validator outputFile onError logFile
 
+
+processCsvFile :: (MonadError String m, MonadIO m, MonadReader JSContextPtr m, ToJSON res) =>
+  (JSValueForeignPtr -> m res)
+  -> (res -> [ValidatorFailure])
+  -> FilePath
+  -> Maybe Handle
+  -> ErrorOpts
+  -> Handle
+  -> m ()
 processCsvFile rowFun validator fName logFile onError outputFile = do
   file <- liftIO $ decodeByName <$> BS.readFile fName
   case file of
@@ -123,7 +154,15 @@ processCsvFile rowFun validator fName logFile onError outputFile = do
       parse i row rowFun validator outputFile onError logFile
 
 
-
+parse :: (MonadError String m, MonadIO m, Ord i, Num i, Show i, ToJSON res) =>
+  i
+  -> row
+  -> (row -> m res)
+  -> (res -> [ValidatorFailure])
+  -> Handle
+  -> ErrorOpts
+  -> Maybe Handle
+  -> m ()
 parse i row rowFun validator outputFile onError logFile = do {  
   res <- rowFun row ;
   validate validator res ;
@@ -133,16 +172,17 @@ parse i row rowFun validator outputFile onError logFile = do {
 } `catchError` handleError onError logFile i 
 
 
-
+validate :: MonadError String m => (res -> [ValidatorFailure]) -> res -> m ()
 validate validator res = case validator res of
   [] -> return ()
   errors -> throwError $ intercalate "\n\n" $ map pValidatorFailure errors
 
-
-
+handleError :: (MonadError String m, Show i, MonadIO m) =>
+  ErrorOpts -> Maybe Handle -> i -> String -> m ()
 handleError Terminate _ lineNo err = 
   throwError $ "Terminating with error on line " ++ show lineNo ++ ":\n" ++ err
 handleError LogToConsole _ lineNo err = 
   liftIO $ putStrLn $ "Error on line " ++ show lineNo ++ ": " ++ err
 handleError LogToFile (Just logFile) lineNo err = 
   liftIO $ hPutStrLn logFile $ "Error on line " ++ show lineNo ++ ": " ++ err
+handleError LogToFile Nothing _ _ = undefined 

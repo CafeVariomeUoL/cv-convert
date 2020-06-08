@@ -5,9 +5,8 @@
 module Quickjs.Internal where
 
 import qualified Data.Map as Map
-import           Data.Monoid ((<>), mempty)
 import           Foreign.C.Types
-import           Foreign.Ptr (Ptr, plusPtr)
+import           Foreign.Ptr (plusPtr)
 import           Foreign.Storable (Storable(..))
 import qualified Language.Haskell.TH as TH
 

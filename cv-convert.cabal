@@ -1,7 +1,6 @@
 name:                cv-convert
 version:             0.1
 build-type:          Simple
--- I have no idea what the minimum cabal version actually is.
 cabal-version:       >= 1.25
 
 -- For information on compiling C with cabal:
@@ -27,6 +26,12 @@ executable cv-convert
     string-conv, 
     aeson-pretty, 
     cassava
+  
+  ghc-options: -Wall -O2 -fno-warn-orphans
+  if os(linux)
+    ghc-options: -static -threaded
+    ld-options: -static -pthread
+  
 
 library
   build-depends:
@@ -66,7 +71,9 @@ library
                 quickjs/libunicode.c,
                 quickjs/quickjs.h,
                 quickjs/quickjs.c
-  cc-options: -fPIC -static -D_GNU_SOURCE -DCONFIG_VERSION="2020-04-12" -DCONFIG_BIGNUM -O2
+  cc-options: -static -D_GNU_SOURCE -DCONFIG_VERSION="2020-04-12" -DCONFIG_BIGNUM -O2
 
-  ghc-options: -fPIC
-  ld-options: -static
+  ghc-options: -Wall -O2 
+  if os(linux)
+    ghc-options: -static
+    ld-options: -static -pthread

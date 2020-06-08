@@ -5,7 +5,6 @@ module Quickjs where
 
 import Foreign
 import Foreign.C
-import Foreign.Marshal.Alloc
 import Foreign.ForeignPtr.Unsafe
 import qualified Language.C.Inline as C
 import Control.Monad.Except(MonadError, throwError, runExceptT)
@@ -15,16 +14,16 @@ import Control.Monad.IO.Class(MonadIO, liftIO)
 import Data.Aeson(Value(..))
 import qualified Data.Aeson as Aeson
 
-import Data.Scientific(Scientific, fromFloatDigits, toRealFloat, toBoundedInteger, isInteger)
+import Data.Scientific(fromFloatDigits, toRealFloat, toBoundedInteger, isInteger)
 import Data.Text(Text, pack, unpack)
 import Data.Vector(fromList, imapM_)
 import Data.HashMap.Strict(HashMap, empty, insert, toList)
 import Control.Monad.Except(catchError)
+import Control.Monad.Trans.Except(ExceptT)
 import Control.Monad(when, forM_)
 import Control.Monad.Reader(MonadReader, runReaderT, ask)
+import Control.Monad.Trans.Reader(ReaderT)
 import Data.String.Conv(toS)
-import Unsafe.Coerce(unsafeCoerce)
-import System.Mem(performGC)
 
 import qualified Quickjs.Internal as Raw
 
@@ -218,7 +217,7 @@ checkIsExpcetion ctxPtr val = do
 
 
 jsonToJSValue :: (MonadError String m, MonadIO m) => JSContextPtr -> Value -> m Raw.JSValue
-jsonToJSValue ctx Null = pure jsNullValue
+jsonToJSValue _ Null = pure jsNullValue
 jsonToJSValue ctx (Bool b) = liftIO $ jsNewBool ctx b
 jsonToJSValue ctx (Number n) = 
   if isInteger n then liftIO $ jsNewFloat64 ctx (toRealFloat n)
@@ -616,7 +615,8 @@ call funName args = do
   return ptr
 
 
-
+quickjs :: MonadIO m =>
+  ReaderT (Ptr Raw.JSContext) m b -> m b
 quickjs f = do
     rt <- liftIO $ jsNewRuntime
     ctx <- liftIO $ jsNewContext rt
@@ -632,6 +632,9 @@ quickjs f = do
   --     -- jsFreeContext ctx
   --     -- jsFreeRuntime rt
 
+quickjsIO :: ReaderT (Ptr Raw.JSContext)
+                     (ExceptT String IO)
+                     a -> IO ()
 quickjsIO f = do
   res <- runExceptT $ quickjs f
   case res of

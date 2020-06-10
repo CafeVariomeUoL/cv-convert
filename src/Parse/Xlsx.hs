@@ -17,6 +17,8 @@ import qualified Data.Map.Strict            as M
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Control.Monad.IO.Class     (MonadIO)
+import           Data.List                  (sortOn)
+import           Data.String.Conv           (StringConv, toS)
 
 -- Adapted from https://github.com/nkpart/xlsx2yaml/blob/master/src/Lib.hs
 
@@ -25,24 +27,37 @@ type Sheet r c v = M.Map (r, c) v
 
 
 
-readXlsxFile :: MonadIO m => FilePath -> m [JSON.Value]
+readXlsxFile :: MonadIO m => FilePath -> m [([Text], [JSON.Value])]
 readXlsxFile inFile = do
     Xlsx{..} <- liftIO $ toXlsx <$> L.readFile inFile
-    return $ concat $ fmap (sheetToValue 2 . snd) _xlSheets
+    return $ fmap (sheetToValue 2 . snd) _xlSheets
 
 
 -- | Encode a worksheet as a JSON Object.
 sheetToValue
-  :: Int -> Worksheet -> [JSON.Value]
+  :: Int -> Worksheet -> ([Text],[JSON.Value])
 sheetToValue dataStart sheet =
-  let fields = readFieldNames . extractRow 1 . _wsCells $ sheet
+  let fields = uniqueHeader . readFieldNames . extractRow 1 . _wsCells $ sheet
       dataRows = extractDefinedRows dataStart (M.mapMaybe _cellValue $ _wsCells sheet)
-  in map (\(i,r) -> JSON.object $ rowToJSON fields "i" i r) $ zip [0..] dataRows
+      rows = map (\(i,r) -> JSON.object $ rowToJSON fields "i" i r) $ zip [0..] dataRows
+  in (map snd $ sortOn fst $ M.toList $ fields, rows)
+
+
+-- | we have to make sure that non-unique columns are distinguished. we do this by appending a number to every occurence of the same column name
+uniqueHeader :: (Ord k, Ord a, Semigroup a, StringConv String a) =>
+                      M.Map k a -> M.Map k a
+uniqueHeader = M.fromList . f M.empty . sortOn fst .  M.toList
+  where 
+    f :: (Semigroup a, Ord a, StringConv String a) => M.Map a Int -> [(k,a)] -> [(k,a)]
+    f _ [] = []
+    f hdrDups ((i,h):hs)
+      | h `M.member` hdrDups = (i,h <> (toS $ show $ hdrDups M.! h)) : f (M.adjust (+1) h hdrDups) hs
+      | otherwise = (i,h) : f (M.insert h 1 hdrDups) hs
 
 -- | Merge field names with a row of cells, into the contents of a JSON Object
 rowToJSON
   :: Ord k1
-  => Row k1 k -> k -> Int -> Row k1 CellValue -> [(k, JSON.Value)]
+  => Row k1 Text -> Text -> Int -> Row k1 CellValue -> [(Text, JSON.Value)]
 rowToJSON fields i_k i row = (i_k , JSON.Number $ fromIntegral i) : (M.elems $ M.intersectionWith f fields row)
   where f fieldName value = (fieldName, cellValueToValue value)
 

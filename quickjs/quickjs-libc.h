@@ -46,4 +46,7 @@ void js_std_promise_rejection_tracker(JSContext *ctx, JSValueConst promise,
                                       JSValueConst reason,
                                       JS_BOOL is_handled, void *opaque);
 
+
+JSValue js_print(JSContext *ctx, JSValueConst this_val,
+                              int argc, JSValueConst *argv);
 #endif /* QUICKJS_LIBC_H */

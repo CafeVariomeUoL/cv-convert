@@ -13,8 +13,9 @@ import Data.List(intercalate)
 import Data.Char (isSpace)
 import qualified Data.Set as Set
 
-compileSchema :: Schema -> Either SchemaInvalid (Value -> [ValidatorFailure])
-compileSchema s = checkSchema (URISchemaMap HM.empty) (SchemaWithURI s Nothing)
+compileSchema :: Maybe Schema -> Either SchemaInvalid (Value -> [ValidatorFailure])
+compileSchema (Just s) = checkSchema (URISchemaMap HM.empty) (SchemaWithURI s Nothing)
+compileSchema Nothing = Right $ \_ -> []
 
 shortenLen :: Int
 shortenLen = 30

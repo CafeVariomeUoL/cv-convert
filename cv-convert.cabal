@@ -24,10 +24,9 @@ executable cv-convert
     filepath, 
     pretty-simple, 
     string-conv, 
-    aeson-pretty, 
-    cassava
+    aeson-pretty
   
-  ghc-options: -Wall -O2 -fno-warn-orphans
+  ghc-options: -Wall -O2
   if os(linux)
     ghc-options: -static -threaded
     ld-options: -static -pthread
@@ -53,11 +52,12 @@ library
     split, 
     xlsx,
     lens,
-    bytestring
+    bytestring,
+    cassava
   hs-source-dirs:
     src
   exposed-modules:
-    Quickjs, Schema, Parse.Xlsx
+    Quickjs, Schema, Parse.Xlsx, Parse.Csv
   other-modules:       Quickjs.Internal
   default-language:
     Haskell2010
@@ -70,10 +70,12 @@ library
                 quickjs/libregexp.c,
                 quickjs/libunicode.c,
                 quickjs/quickjs.h,
-                quickjs/quickjs.c
+                quickjs/quickjs.c,
+                quickjs/quickjs-libc.h,
+                quickjs/quickjs-libc.c
   cc-options: -static -D_GNU_SOURCE -DCONFIG_VERSION="2020-04-12" -DCONFIG_BIGNUM -O2
 
-  ghc-options: -Wall -O2 
+  ghc-options: -Wall -O2 -fno-warn-orphans
   if os(linux)
     ghc-options: -static
     ld-options: -static -pthread

@@ -5,7 +5,7 @@ module Quickjs where
 
 import Foreign
 import Foreign.C
-import Foreign.ForeignPtr.Unsafe
+-- import Foreign.ForeignPtr.Unsafe
 import qualified Language.C.Inline as C
 import Control.Monad.Except(MonadError, throwError, runExceptT)
 
@@ -31,6 +31,7 @@ import qualified Quickjs.Internal as Raw
 
 C.context Raw.quickjsCtx
 C.include "quickjs.h"
+C.include "quickjs-libc.h"
 
 
 
@@ -220,10 +221,10 @@ jsonToJSValue :: (MonadError String m, MonadIO m) => JSContextPtr -> Value -> m 
 jsonToJSValue _ Null = pure jsNullValue
 jsonToJSValue ctx (Bool b) = liftIO $ jsNewBool ctx b
 jsonToJSValue ctx (Number n) = 
-  if isInteger n then liftIO $ jsNewFloat64 ctx (toRealFloat n)
+  if not (isInteger n) then liftIO $ jsNewFloat64 ctx (toRealFloat n)
   else case toBoundedInteger n of
     Just i -> liftIO $ jsNewInt64 ctx i
-    Nothing -> throwError "Value does not fint in Int64"
+    Nothing -> throwError "Value does not fit in Int64"
 jsonToJSValue ctx (String s) = liftIO $ jsNewString ctx (unpack s) 
 jsonToJSValue ctxPtr (Array xs) = do
   jsval <- liftIO (C.withPtr_ $ \jsvalPtr -> [C.block| void { *$(JSValue *jsvalPtr) = JS_NewArray($(JSContext *ctxPtr)); } |])
@@ -479,9 +480,9 @@ jsGetOwnPropertyNames ctxPtr val properties flags = do
   else throwError "Could not get object properties"
 
 
-jsCall :: JSContextPtr -> Raw.JSValue -> CInt -> Ptr (Ptr Raw.JSValue) -> IO Raw.JSValue
+jsCall :: JSContextPtr -> Raw.JSValue -> CInt -> (Ptr Raw.JSValue) -> IO Raw.JSValue
 jsCall ctxt fun_obj argc argv = C.withPtr_ $ \res -> with fun_obj $ \funPtr -> 
-  [C.block| void { *$(JSValue *res) = JS_Call($(JSContext *ctxt), *$(JSValueConst *funPtr), JS_NULL, $(int argc), *$(JSValueConst **argv)); } |]
+  [C.block| void { *$(JSValue *res) = JS_Call($(JSContext *ctxt), *$(JSValueConst *funPtr), JS_NULL, $(int argc), $(JSValueConst *argv)); } |]
 
 
 jsEval :: JSContextPtr -> CString -> CSize -> CString -> CInt -> IO Raw.JSValue
@@ -561,7 +562,7 @@ fromJSValue valFPtr = do
 
 
 
-callRaw :: (MonadError String m, MonadIO m) => JSContextPtr -> String -> [JSValuePtr] -> m Raw.JSValue
+callRaw :: (MonadError String m, MonadIO m) => JSContextPtr -> String -> [Raw.JSValue] -> m Raw.JSValue
 callRaw ctxPtr funName args = do
     globalObject <- liftIO $ C.withPtr_ $ \globalObjectPtr ->
       [C.block| void { *$(JSValue *globalObjectPtr) = JS_GetGlobalObject($(JSContext *ctxPtr)); } |]
@@ -583,7 +584,7 @@ callRaw ctxPtr funName args = do
     when (not isObj) $ do
       liftIO $ jsFreeValue ctxPtr fun
       throwError $ funName ++ " is not an object"
-    res <- liftIO $ withArray args $ \argv -> jsCall ctxPtr fun (fromIntegral $ length args) argv
+    res <- liftIO $ withArrayLen args $ \len argv -> jsCall ctxPtr fun (fromIntegral $ len) argv
     liftIO $ jsFreeValue ctxPtr fun
     return res
 
@@ -599,11 +600,13 @@ callRaw ctxPtr funName args = do
 
 
 call :: (MonadError String m, MonadReader JSContextPtr m, MonadIO m) => String -> [JSValueForeignPtr] -> m JSValueForeignPtr
-call funName args = do
+call funName argPtrs = do
   ctx <- ask
 
-  val <- callRaw ctx funName (map unsafeForeignPtrToPtr args)
-  liftIO $ forM_ args touchForeignPtr
+  args <- liftIO $ mapM (\fPtr -> withForeignPtr fPtr peek) argPtrs
+
+  val <- callRaw ctx funName args
+  -- liftIO $ forM_ args touchForeignPtr
 
   isExn <- liftIO $ jsIsException val
   when isExn $ do
@@ -620,6 +623,20 @@ quickjs :: MonadIO m =>
 quickjs f = do
     rt <- liftIO $ jsNewRuntime
     ctx <- liftIO $ jsNewContext rt
+
+    liftIO $ [C.block| void { 
+      JSValue global_obj, console;
+
+      global_obj = JS_GetGlobalObject($(JSContext *ctx));
+      console = JS_NewObject($(JSContext *ctx));
+
+      JS_SetPropertyStr($(JSContext *ctx), console, "log",
+                        JS_NewCFunction($(JSContext *ctx), js_print, "log", 1));
+      JS_SetPropertyStr($(JSContext *ctx), global_obj, "console", console);
+
+      JS_FreeValue($(JSContext *ctx), global_obj);
+    } |]
+
 
 
     -- liftIO $ jsAddIntrinsicOperators ctx

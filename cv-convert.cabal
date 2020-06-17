@@ -24,13 +24,28 @@ executable cv-convert
     filepath, 
     pretty-simple, 
     string-conv, 
-    aeson-pretty
-  
+    aeson-pretty,
+    pcre-heavy,
+    optparse-generic,
+    directory,
+    load-env,
+    postgresql-pure,
+    HDBC,
+    data-default-class,
+    transformers-base
   ghc-options: -Wall -O2
   if os(linux)
-    ghc-options: -static -threaded
-    ld-options: -static -pthread
-  
+
+    ghc-options: -static
+    ld-options: -static -pthread 
+    -- -lpq -L/lib -lssl -lcrypto 
+    -- pkgconfig-depends: openssl, libpq
+    -- -lpq -lpgport -lpgcommon -L/usr/lib/llvm10/lib -lssl -lcrypto -lm 
+    -- -lecpg -lecpg_compat -lpgcommon -lpgcommon_shlib  -lpgfeutils -lpgport -lpgtypes -lcrypto -lssl -lm -lpq 
+    
+    -- -lpgport -lldap -lopenssl -lcrypto -lpgcommon  -lz  -lm -lpq 
+    -- -lxml2 -ledit
+    -- extra-libraries: postgresql
 
 library
   build-depends:
@@ -53,12 +68,18 @@ library
     xlsx,
     lens,
     bytestring,
-    cassava
+    cassava,
+    yeshql-core,
+    yeshql-hdbc,
+    HDBC,
+    convertible,
+    postgresql-pure,
+    uuid
   hs-source-dirs:
     src
   exposed-modules:
-    Quickjs, Schema, Parse.Xlsx, Parse.Csv
-  other-modules:       Quickjs.Internal
+    Quickjs, Schema, Parse.Xlsx, Parse.Csv, DB, JSON.Utils
+  other-modules:       Quickjs.Internal, Parse.Utils
   default-language:
     Haskell2010
   Include-dirs: quickjs
@@ -78,4 +99,7 @@ library
   ghc-options: -Wall -O2 -fno-warn-orphans
   if os(linux)
     ghc-options: -static
-    ld-options: -static -pthread
+    ld-options: -static -pthread 
+    -- -lpq -L/lib -lssl -lcrypto 
+    -- pkgconfig-depends: libpq
+    -- extra-libraries: pgport xml2 ssl crypto com_err

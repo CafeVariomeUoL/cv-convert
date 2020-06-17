@@ -490,11 +490,14 @@ jsEval ctxPtr input input_len filename eval_flags =
   C.withPtr_ $ \ptr -> [C.block| void { *$(JSValue *ptr) = JS_Eval($(JSContext *ctxPtr), $(const char *input), $(size_t input_len), $(const char *filename), $(int eval_flags)); } |]
 
 
-evalRaw :: JSContextPtr -> String -> IO Raw.JSValue
-evalRaw ctx code = 
+evalRaw :: JSContextPtr -> EvalType -> String -> IO Raw.JSValue
+evalRaw ctx eTyp code = 
     withCString "script.js" $ \cfilename ->
         withCStringLen code $ \(ccode, ccode_len) -> 
-            jsEval ctx ccode (fromIntegral ccode_len) cfilename (fromIntegral Raw.js_eval_type_global)
+            jsEval ctx ccode (fromIntegral ccode_len) cfilename (fromIntegral $ case eTyp of 
+                Global -> Raw.js_eval_type_global
+                Module -> Raw.js_eval_type_module
+              )
 
 
 -- eval_ :: (MonadError String m, MonadIO m) => Context -> String -> m ()
@@ -512,10 +515,12 @@ evalRaw ctx code =
 --     f ptr
 
 
-eval :: (MonadError String m, MonadReader JSContextPtr m, MonadIO m) => String -> m (JSValueForeignPtr)
-eval code = do
+data EvalType = Global | Module
+
+eval :: (MonadError String m, MonadReader JSContextPtr m, MonadIO m) => EvalType -> String -> m (JSValueForeignPtr)
+eval eTyp code = do
   ctx <- ask
-  val <- liftIO $ evalRaw ctx code
+  val <- liftIO $ evalRaw ctx eTyp code
   isExn <- liftIO $ jsIsException val
   when isExn $ do
     e <- getErrorMessage ctx
@@ -649,9 +654,7 @@ quickjs f = do
   --     -- jsFreeContext ctx
   --     -- jsFreeRuntime rt
 
-quickjsIO :: ReaderT (Ptr Raw.JSContext)
-                     (ExceptT String IO)
-                     a -> IO ()
+quickjsIO :: ReaderT (Ptr Raw.JSContext) (ExceptT String IO) a -> IO ()
 quickjsIO f = do
   res <- runExceptT $ quickjs f
   case res of

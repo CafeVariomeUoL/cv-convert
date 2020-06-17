@@ -45,7 +45,15 @@ extra-deps:
 - hjsonschema-1.10.0@sha256:d8143c0fa792276ed5743b619447c5b7c3e7dbd73b356e74259232574b6cc394,5249
 - hjsonpointer-1.3.0@sha256:26eea6a7c0414939cb239f653d293ff1a1f76b569e3dca6e0ecf950b54c5fb50,1591
 - shorten-strings-0.1.0.1@sha256:77be3e24e5880e764ef37d0b901ebfacbeb2c958dae293dcb78e0e0f96ea8376,760
-
+- yeshql-4.2.0.0@sha256:fef368db1f310df58841cdd4ae1a415d3c62b2de9f202a83c807301244dcf3a2,953
+- yeshql-core-4.2.0.0@sha256:c786f754ddd5936f36b42700b1bd965167befd306bc4f93df4f64074d58799d6,1619
+- yeshql-hdbc-4.1.1.2@sha256:c8296fa0eda19ab2c85eb8892e32250242199e04546bcea5c8d2882c1119a144,1727
+- homotuple-0.1.1.0@sha256:2ab4f6c6573c56d65c2bb5867a770294ea0917eb0d17eb758d0c06177ed4b888,1781
+- list-tuple-0.1.2.0@sha256:f2e4011a87124a3427024b5ceae6e2183556a4e17ceaeac902c7f5ee2aae47a5,2460
+- single-tuple-0.1.1.0@sha256:8dde826850b01f6b7ac053645e97e52e905e6e98cfbfec115c822ab7eb7e6dc5,1938
+# - postgresql-pure-0.1.2.0@sha256:a0bb37ab898c7a3e80b7e55af78ee39f0b63beaeb0e53727ac192aa0e4448a02,11649
+- github: goodlyrottenapple/postgresql-pure
+  commit: a804ae57d78e86e535e9a11a6b993bdf2a965b51
 allow-newer: true
 
 # Override default flag values for local packages and extra-deps
@@ -71,3 +79,6 @@ allow-newer: true
 #
 # Allow a newer minor version of GHC than the snapshot specifies
 # compiler-check: newer-minor
+
+# docker:
+#   image: static-haskell-alpine-8.8.3

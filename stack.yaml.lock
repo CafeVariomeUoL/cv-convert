@@ -25,6 +25,48 @@ packages:
       sha256: 07d51787370a5769a3548a8f57771352490d2efd205fd9e665d6f3d488045acc
   original:
     hackage: shorten-strings-0.1.0.1@sha256:77be3e24e5880e764ef37d0b901ebfacbeb2c958dae293dcb78e0e0f96ea8376,760
+- completed:
+    hackage: yeshql-4.2.0.0@sha256:fef368db1f310df58841cdd4ae1a415d3c62b2de9f202a83c807301244dcf3a2,953
+    pantry-tree:
+      size: 215
+      sha256: d8b73337108ff8e905df3c160944b253b73af27d5513f2221796f9a3ec28e0f0
+  original:
+    hackage: yeshql-4.2.0.0@sha256:fef368db1f310df58841cdd4ae1a415d3c62b2de9f202a83c807301244dcf3a2,953
+- completed:
+    hackage: yeshql-core-4.2.0.0@sha256:c786f754ddd5936f36b42700b1bd965167befd306bc4f93df4f64074d58799d6,1619
+    pantry-tree:
+      size: 567
+      sha256: ac3ba73b70be06205ac31d260c11d45496ddcf6a26f68c141f01e3de9db519da
+  original:
+    hackage: yeshql-core-4.2.0.0@sha256:c786f754ddd5936f36b42700b1bd965167befd306bc4f93df4f64074d58799d6,1619
+- completed:
+    hackage: yeshql-hdbc-4.1.1.2@sha256:c8296fa0eda19ab2c85eb8892e32250242199e04546bcea5c8d2882c1119a144,1727
+    pantry-tree:
+      size: 751
+      sha256: 1d3ca57b09369bb9268d544fe4208006b41c18bd828427deca2b14ebd12d226c
+  original:
+    hackage: yeshql-hdbc-4.1.1.2@sha256:c8296fa0eda19ab2c85eb8892e32250242199e04546bcea5c8d2882c1119a144,1727
+- completed:
+    hackage: homotuple-0.1.1.0@sha256:2ab4f6c6573c56d65c2bb5867a770294ea0917eb0d17eb758d0c06177ed4b888,1781
+    pantry-tree:
+      size: 545
+      sha256: 3e6bf4fb7c4556ea5624abf70640ad769b8ff037bd89cb99f5d02e95b97b5c1d
+  original:
+    hackage: homotuple-0.1.1.0@sha256:2ab4f6c6573c56d65c2bb5867a770294ea0917eb0d17eb758d0c06177ed4b888,1781
+- completed:
+    hackage: list-tuple-0.1.2.0@sha256:f2e4011a87124a3427024b5ceae6e2183556a4e17ceaeac902c7f5ee2aae47a5,2460
+    pantry-tree:
+      size: 843
+      sha256: cd010e359d6182f7e70d314c660ec53049d199ccd4144964ac94f8d4923b530e
+  original:
+    hackage: list-tuple-0.1.2.0@sha256:f2e4011a87124a3427024b5ceae6e2183556a4e17ceaeac902c7f5ee2aae47a5,2460
+- completed:
+    hackage: single-tuple-0.1.1.0@sha256:8dde826850b01f6b7ac053645e97e52e905e6e98cfbfec115c822ab7eb7e6dc5,1938
+    pantry-tree:
+      size: 441
+      sha256: 83d204053a79ac4620f4e411830b869766912a8dd1ade5f20bbce7e8de0f817c
+  original:
+    hackage: single-tuple-0.1.1.0@sha256:8dde826850b01f6b7ac053645e97e52e905e6e98cfbfec115c822ab7eb7e6dc5,1938
 snapshots:
 - completed:
     size: 496111

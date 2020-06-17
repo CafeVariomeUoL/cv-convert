@@ -38,9 +38,9 @@ js_tag_exception   = 6
 js_tag_float64     = 7
 
 
-js_eval_type_global :: CUInt
+js_eval_type_global, js_eval_type_module :: CUInt
 js_eval_type_global = 0
-
+js_eval_type_module = 1
 
 js_gpn_string_mask, js_gpn_symbol_mask, js_gpn_private_mask, js_gpn_enum_only, js_gpn_set_enum :: CUInt
 js_gpn_string_mask = 1

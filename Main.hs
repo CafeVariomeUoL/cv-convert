@@ -31,6 +31,7 @@ import           LoadEnv                      (loadEnvFromAbsolute)
 import           System.Environment           (lookupEnv)
 import           Data.Scientific              (toBoundedInteger)
 import qualified Data.HashSet                  as S
+import qualified Data.Vector                   as V
 import           Database.HDBC.PostgreSQL.Pure(Config(..), Address(..), Connection, connect)
 import           Database.HDBC.Types          (IConnection(commit, disconnect))
 import           Data.Default.Class           (def)
@@ -144,15 +145,21 @@ main = do
             lib <- liftIO $ lookupEnv "jslib"
             loadLibrary (fromMaybe "./lib.js" lib)
             _ <- eval Global $ "rowFun = (row, header) => { " ++ processFunction ++ " }"
-            let rowFun row header = call "rowFun" [row, header] >>= fromJSValue_
+            
             processFile dbConnInfo source_id rowFun validator input fileType (fromMaybe LogToConsole onError) (fromMaybe 0 startFrom)
     Nothing -> putStrLn "Invalid Settings file"
 
+  where
+    rowFun row header = do
+      r <- call "rowFun" [row, header] 
+      res <- fromJSValue_ r
+      freeJSValue r
+      return res
 
 processFile :: (MonadError String m, MonadIO m, MonadReader JSContextPtr m) =>
      Maybe Config
   -> Maybe Int
-  -> (JSValueForeignPtr -> JSValueForeignPtr -> m Value)
+  -> (JSValue -> JSValue -> m Value)
   -> (Value -> [ValidatorFailure])
   -> FilePath
   -> FileType
@@ -195,6 +202,7 @@ processFile dbConnInfo source_id rowFun validator fName fType onError startFromL
       TXT  -> processTxtFile  rowFun validator fName logFile onError startFromLine outputHandle
       XLSX -> processXlsxFile rowFun validator fName logFile onError outputHandle
       CSV  -> processCsvFile  rowFun validator fName logFile onError outputHandle
+      JSON -> processJsonFile rowFun validator fName logFile onError outputHandle
 
 
 getSubjectID :: MonadError String m => Value -> m Int
@@ -218,7 +226,7 @@ processRow input m = ifoldlM (\i jsonAttrValsAcc l -> do
 
 
 processTxtFile :: (MonadError String m, MonadIO m, MonadReader JSContextPtr m) =>
-     (JSValueForeignPtr -> JSValueForeignPtr -> m Value)
+     (JSValue -> JSValue -> m Value)
   -> (Value -> [ValidatorFailure])
   -> FilePath
   -> Maybe Handle
@@ -231,16 +239,21 @@ processTxtFile rowFun validator fName logFile onError startFromLine outputHandle
   txt <- liftIO $ Text.hGetContents file
   header <- toJSValue ([("h", "data")] :: [(Text.Text, Text.Text)])
 
-  processRow (Text.lines txt) $ \i l ->
+  res <- processRow (Text.lines txt) $ \i l ->
     if (i < startFromLine) then 
       return Nothing
     else do
       row <- toJSValue (Object $ HM.fromList [("i" , toJSON i), ("data" , toJSON l)])
-      parse i row header rowFun validator outputHandle onError logFile
+      row_res <- parse i row header rowFun validator outputHandle onError logFile
+      freeJSValue row
+      return row_res
+  
+  freeJSValue header
+  return res
 
 
 processXlsxFile :: (MonadError String m, MonadIO m, MonadReader JSContextPtr m) =>
-     (JSValueForeignPtr -> JSValueForeignPtr -> m Value)
+     (JSValue -> JSValue -> m Value)
   -> (Value -> [ValidatorFailure])
   -> FilePath
   -> Maybe Handle
@@ -253,14 +266,17 @@ processXlsxFile rowFun validator fName logFile onError outputHandle = do
     header <- toJSValue (toJSON h) ;
     jsonAttrValsAcc' <- processRow rows $ \i r -> do {
       row <- toJSValue r ;
-      parse i row header rowFun validator outputHandle onError logFile 
+      row_res <- parse i row header rowFun validator outputHandle onError logFile ;
+      freeJSValue row ;
+      return row_res
     };
+    freeJSValue header ;
     return $ HM.unionWith (S.union) jsonAttrValsAcc jsonAttrValsAcc'
   }) HM.empty headerRowsList
 
 
 processCsvFile :: (MonadError String m, MonadIO m, MonadReader JSContextPtr m) =>
-     (JSValueForeignPtr -> JSValueForeignPtr -> m Value)
+     (JSValue -> JSValue -> m Value)
   -> (Value -> [ValidatorFailure])
   -> FilePath
   -> Maybe Handle
@@ -271,10 +287,48 @@ processCsvFile rowFun validator fName logFile onError outputHandle = do
   (h, rows) <- readCsvFile fName
   header <- toJSValue h
 
-  processRow rows $ \i r -> do
+  res <- processRow rows $ \i r -> do
     row <- toJSValue $ Object $ HM.insert "i" (toJSON i) r
-    parse i row header rowFun validator outputHandle onError logFile
+    row_res <- parse i row header rowFun validator outputHandle onError logFile
+    freeJSValue row
+    return row_res
+  freeJSValue header
+  return res
 
+
+processJsonFile :: (MonadError String m, MonadIO m, MonadReader JSContextPtr m) =>
+     (JSValue -> JSValue -> m Value)
+  -> (Value -> [ValidatorFailure])
+  -> FilePath
+  -> Maybe Handle
+  -> ErrorOpts
+  -> Either (Connection, Int, Int) Handle
+  -> m (HM.HashMap Value (S.HashSet Value))
+processJsonFile rowFun validator fName logFile onError outputHandle = do 
+  f <- liftIO $ BS.readFile fName;
+  let 
+    (rows, hs) = case decode f of
+      Just (Array js) -> (V.toList js, S.toList $ V.foldl (\acc o -> (S.fromList $ getHeader o) `S.union` acc) S.empty js)
+      Just o -> ([o], getHeader o)
+      Nothing -> ([], [])
+  
+  header <- toJSValue $ Object $ HM.fromList $ map (\h -> ("h", toJSON h)) hs
+
+  res <- processRow rows $ \i r -> do
+    row <- toJSValue $ insertI i r
+    row_res <- parse i row header rowFun validator outputHandle onError logFile
+    freeJSValue row
+    return row_res
+  freeJSValue header
+  return res
+  
+
+  where
+    getHeader (Object o) = HM.keys o
+    getHeader _ = []
+
+    insertI i (Object o) = Object $ HM.insert "i" (toJSON i) o
+    insertI i o = Object $ HM.fromList [ ("i",toJSON i), ("data", o) ]
 
 parse :: (MonadError String m, MonadIO m, Ord i, Num i, Integral i, Show i) =>
      i
@@ -297,7 +351,7 @@ parse i row header rowFun validator outputHandle onError logFile = do {
       -- flatten record into EAV and insert into the EAV table
       (_,eav) <- flattenToEAV res
       forM_ eav $ \(uuid,attr,val) -> insertEAV uuid (show srcID) fileID (show subjectID) attr val con
-      
+
       return $ Just $ createAllPathsWithValues res
     Right outputFile -> do
       when (i > 0) $ BS.hPutStr outputFile " , "

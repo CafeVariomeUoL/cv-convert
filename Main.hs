@@ -205,12 +205,9 @@ processFile dbConnInfo source_id rowFun validator fName fType onError startFromL
       JSON -> processJsonFile rowFun validator fName logFile onError outputHandle
 
 
-getSubjectID :: MonadError String m => Value -> m Int
+getSubjectID :: MonadError String m => Value -> m String
 getSubjectID (Object m) = case HM.lookup "subject_id" m of
-  Just (Number sid) -> case (toBoundedInteger sid :: Maybe Int) of
-    Just i -> return i
-    Nothing -> throwError $ "Couldn't convert source_id to Integer."
-  Just _ -> throwError "source_id must be an integer"
+  Just x -> return (show x)
   Nothing -> throwError "subject_id is required"
 getSubjectID o = throwError $ "Expected " ++ show o ++ " to be an object."
 
@@ -347,10 +344,10 @@ parse i row header rowFun validator outputHandle onError logFile = do {
   liftIO $ case outputHandle of 
     Left (con, srcID, fileID) -> do
       -- insert record into the JSONB table
-      insertJSONBOverrideOnConflict srcID fileID (show subjectID) res con
+      insertJSONBOverrideOnConflict srcID fileID subjectID res con
       -- flatten record into EAV and insert into the EAV table
       (_,eav) <- flattenToEAV res
-      forM_ eav $ \(uuid,attr,val) -> insertEAV uuid (show srcID) fileID (show subjectID) attr val con
+      forM_ eav $ \(uuid,attr,val) -> insertEAV uuid (show srcID) fileID subjectID attr val con
 
       return $ Just $ createAllPathsWithValues res
     Right outputFile -> do

@@ -45,13 +45,6 @@ foreign import ccall "JS_FreeRuntime"
 
 
 
--- -- foreign import ccall "&JS_FreeRuntime"
--- --   jsRuntimeFinalizer :: FinalizerPtr JSRuntime
--- jsRuntimeFinalizer :: FinalizerPtr Raw.JSRuntime
--- jsRuntimeFinalizer = [C.funPtr| void free(JSRuntime *rt){ JS_FreeRuntime(rt); } |]
-
-
-
 
 foreign import ccall "JS_NewContext"
   jsNewContext :: Ptr Raw.JSRuntime -> IO (Ptr Raw.JSContext)
@@ -60,41 +53,6 @@ foreign import ccall "JS_NewContext"
 foreign import ccall "JS_FreeContext"
   jsFreeContext :: Ptr Raw.JSContext -> IO ()
 
-
-
--- foreign import ccall "&JS_FreeContext"
---   jsContextFinalizer :: FinalizerPtr JSContext
-
-
--- jsContextFinalizer :: FinalizerPtr JSContext
--- jsContextFinalizer = [C.funPtr| void free(JSContext *ctx){ fprintf(stderr, "Releasing ctx\n"); JS_FreeContext(ctx); } |]
-
-
-
-
--- foreign import ccall "JS_AddIntrinsicOperators"
---   jsAddIntrinsicOperators :: Ptr Raw.JSContext -> IO ()
-
-
--- data JSContext = JSContext { rt :: JSRuntime, ctx :: ForeignPtr Raw.JSContext }
-
--- newContext :: MonadIO m => JSRuntime -> m JSContext
--- newContext rt = liftIO $ withForeignPtr rt $ \rtmPtr -> do
---     ptr <- jsNewContext rtmPtr
---     jsAddIntrinsicOperators ptr
---     ctx <- newForeignPtr jsContextFinalizer ptr
---     return Context{..}
-
-
--- jsValueFinalizer :: FinalizerEnvPtr Raw.JSContext Raw.JSValue
--- jsValueFinalizer = [C.funPtr| void free(JSContext *ctx, JSValue *v){
---     if (JS_VALUE_HAS_REF_COUNT(*v)) {
---         JSRefCountHeader *p = (JSRefCountHeader *)JS_VALUE_GET_PTR(*v);
---         if (--p->ref_count <= 0) {
---             __JS_FreeValue(ctx, *v);
---         }
---     }
---   } |]
 
 jsFreeValue :: JSContextPtr -> Raw.JSValue -> IO ()
 jsFreeValue ctx val = with val $ \v -> [C.block| void {
@@ -108,18 +66,7 @@ jsFreeValue ctx val = with val $ \v -> [C.block| void {
 
 type JSContextPtr = Ptr Raw.JSContext
 
--- type JSValuePtr = Ptr Raw.JSValue
-
 type JSValueConstPtr = Ptr Raw.JSValueConst
-
-
-
--- newValuePtr :: JSContextPtr -> Raw.JSValue -> IO JSValueForeignPtr
--- newValuePtr ctxPtr val = do
---     jsval <- mallocForeignPtr
---     addForeignPtrFinalizerEnv jsValueFinalizer ctxPtr jsval
---     withForeignPtr jsval $ \ptr -> poke ptr val
---     return jsval
 
 
 
@@ -409,7 +356,6 @@ jsObjectToJSON ctxPtr obj = do
     cleanup properties plen
     return res
   where
-
     collectVals :: (MonadError String m, MonadIO m) => Ptr (Ptr Raw.JSPropertyEnum) -> JSValueConstPtr -> Int -> Int -> m (HashMap Text Value)
     collectVals properties objPtr !index end 
       | index < end = do
@@ -442,9 +388,6 @@ jsObjectToJSON ctxPtr obj = do
 
       | otherwise = return empty
 
-
-
-
     cleanup :: (MonadError String m, MonadIO m) => Ptr (Ptr Raw.JSPropertyEnum) -> Int -> m ()
     cleanup properties plen = liftIO $ do
       forLoop plen $ \index -> do
@@ -456,12 +399,6 @@ jsObjectToJSON ctxPtr obj = do
 
       free properties
 
-
--- jsGetException :: JSContextPtr -> IO JSValuePtr
--- jsGetException ctxPtr = do
---   ptr <- malloc
---   [C.block| void { *$(JSValue *ptr) = JS_GetException($(JSContext *ctxPtr)); } |]
---   return ptr
 
 
 getErrorMessage :: MonadIO m => JSContextPtr -> m String
@@ -477,14 +414,6 @@ jsGetPropertyStr :: MonadIO m => JSContextPtr -> Raw.JSValue -> String -> m Raw.
 jsGetPropertyStr ctxPtr val str = liftIO $
   C.withPtr_ $ \ptr -> withCString str $ \prop -> with val $ \valPtr ->
     [C.block| void { *$(JSValue *ptr) = JS_GetPropertyStr($(JSContext *ctxPtr), *$(JSValueConst *valPtr), $(const char *prop)); } |]
-
-
--- jsGetPropertyInt :: MonadIO m => JSContextPtr -> JSValuePtr -> Int -> m JSValuePtr
--- jsGetPropertyInt ctxPtr valPtr i = liftIO $ do
---   ptr <- malloc
---   let idx = fromIntegral i
---   [C.block| void { *$(JSValue *ptr) = JS_GetPropertyUint32($(JSContext *ctxPtr), *$(JSValueConst *valPtr), $(uint32_t idx)); } |]
---   return ptr
 
 
 jsGetOwnPropertyNames :: (MonadError String m, MonadIO m) => JSContextPtr -> Raw.JSValue -> Ptr (Ptr Raw.JSPropertyEnum) -> CInt -> m Int
@@ -514,20 +443,6 @@ evalRaw ctx eTyp code =
                 Module -> Raw.js_eval_type_module
               )
 
-
--- eval_ :: (MonadError String m, MonadIO m) => Context -> String -> m ()
--- eval_ ctx code = withJSValuePtr ctx $ \ptr -> do
---     liftIO $ evalRaw ctx code ptr
---     isExn <- liftIO $ jsIsException ptr
---     when isExn $ getErrorMessage ctx >>= throwError
-
-
--- evalWithValue :: (MonadError String m, MonadIO m) => Context -> String -> (Ptr JSValue -> m b) -> m b
--- evalWithValue ctx code f = withJSValuePtr ctx $ \ptr -> do
---     liftIO $ evalRaw ctx code ptr
---     isExn <- liftIO $ jsIsException ptr
---     when isExn $ getErrorMessage ctx >>= throwError
---     f ptr
 
 
 data EvalType = Global | Module
@@ -569,11 +484,6 @@ fromJSValue val = do
   case Aeson.fromJSON jsonval of
     Aeson.Success a -> return a
     Aeson.Error str -> throwError str
-
--- eval_ :: (MonadError String m, MonadReader Context m, MonadIO m) => String -> m ()
--- eval_ code = do
---   ctx <- ask
---   evalWithValue ctx code (\_ -> pure ())
 
 
 
@@ -633,26 +543,16 @@ quickjs f = do
     ctx <- liftIO $ jsNewContext rt
 
     liftIO $ [C.block| void { 
-      JSValue global_obj, console;
-
-      global_obj = JS_GetGlobalObject($(JSContext *ctx));
-      console = JS_NewObject($(JSContext *ctx));
-
-      JS_SetPropertyStr($(JSContext *ctx), console, "log",
-                        JS_NewCFunction($(JSContext *ctx), js_print, "log", 1));
-      JS_SetPropertyStr($(JSContext *ctx), global_obj, "console", console);
-
-      JS_FreeValue($(JSContext *ctx), global_obj);
+      js_std_add_helpers($(JSContext *ctx), -1, NULL);
     } |]
 
     res <- (runReaderT f ctx) --`catchError` (\e -> do { cleanup ctx rt ; throwError e })
-    -- cleanup ctx rt
+    cleanup ctx rt
     return res
-  -- where
-  --   cleanup ctx rt = liftIO $ do
-  --     performGC
-  --     -- jsFreeContext ctx
-  --     -- jsFreeRuntime rt
+  where
+    cleanup ctx rt = liftIO $ do
+      jsFreeContext ctx
+      jsFreeRuntime rt
 
 quickjsIO :: ReaderT (Ptr Raw.JSContext) (ExceptT String IO) a -> IO ()
 quickjsIO f = do

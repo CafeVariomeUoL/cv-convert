@@ -29,7 +29,6 @@ import           Data.String.Conv             (toS)
 import           System.Directory             (doesFileExist)
 import           LoadEnv                      (loadEnvFromAbsolute)
 import           System.Environment           (lookupEnv)
-import           Data.Scientific              (toBoundedInteger)
 import qualified Data.HashSet                  as S
 import qualified Data.Vector                   as V
 import           Database.HDBC.PostgreSQL.Pure(Config(..), Address(..), Connection, connect)
@@ -79,7 +78,7 @@ readFileType :: String -> Maybe FileType
 readFileType [] = Nothing
 readFileType s = decode $ toS $ "\"" ++ (map toLower $ tail s) ++ "\""
 
-data ErrorOpts = Terminate | LogToConsole | LogToFile deriving (Show, Eq, Generic)
+data ErrorOpts = Terminate | LogToConsole | LogToFile | LogToDb deriving (Show, Eq, Generic)
 instance FromJSON ErrorOpts where
   parseJSON = genericParseJSON defaultOptions {
                 constructorTagModifier = camelTo2 '_' }
@@ -101,9 +100,11 @@ loadLibrary libPath = do
   libExists <- liftIO $ doesFileExist libPath
   when libExists $ do
     f <- liftIO $ readFile libPath
+    -- rather hacky way to remove the keyword default from the lib.js module
+    -- wehave to do this because quickjs won't let us import and use es modules.
     let f' = gsub [re|export\s+default|] ("" :: String) f
     _ <- eval Global $ f'
-    liftIO $ print $ "loaded lib"
+    liftIO $ print ("loaded lib" :: String)
     return ()
   return ()
 
@@ -114,7 +115,7 @@ main = do
   envExists <- doesFileExist envPath
   if envExists then do
     loadEnvFromAbsolute envPath 
-    liftIO $ print $ "loaded env"
+    liftIO $ print ("loaded env" :: String)
   else pure ()
 
   dbConnInfo <- 
@@ -146,7 +147,15 @@ main = do
             loadLibrary (fromMaybe "./lib.js" lib)
             _ <- eval Global $ "rowFun = (row, header) => { " ++ processFunction ++ " }"
             
-            processFile dbConnInfo source_id rowFun validator input fileType (fromMaybe LogToConsole onError) (fromMaybe 0 startFrom)
+            processFile 
+              dbConnInfo 
+              source_id 
+              rowFun 
+              validator 
+              input 
+              fileType 
+              (onErrorBehaviour dbConnInfo onError) 
+              (fromMaybe 0 startFrom)
     Nothing -> putStrLn "Invalid Settings file"
 
   where
@@ -155,6 +164,15 @@ main = do
       res <- fromJSValue_ r
       freeJSValue r
       return res
+
+    -- if we specifed logging in the settings file, we use that setting
+    -- if we have a DB connection and haven't explicitly specified logging, we default to logging erros to db
+    -- otherwise we log to console 
+    onErrorBehaviour dbConnInfo onError = case (dbConnInfo, onError) of
+      (_, Just e) -> e
+      (Just _, Nothing) -> LogToDb
+      (Nothing, Nothing) -> LogToConsole
+   
 
 processFile :: (MonadError String m, MonadIO m, MonadReader JSContextPtr m) =>
      Maybe Config
@@ -176,11 +194,16 @@ processFile dbConnInfo source_id rowFun validator fName fType onError startFromL
   case (dbConnInfo, source_id) of
     (Just c, Just srcID) -> do
       con <- liftIO $ connect c
-      fileID <- liftIO $ getFileID srcID (takeFileName fName) con
+      file_id <- liftIO $ getFileID srcID (takeFileName fName) con
       
-      _ <- case fileID of
-        Just i -> do
-          jsonAttrVals <- process (Left (con, srcID, i)) logFile
+      _ <- case file_id of
+        Just fileID -> do
+          -- clear any errors from a possible previous run, if we are logging to db
+          case onError of
+            LogToDb -> liftIO $ clearErrors srcID fileID con
+            _ -> pure ()
+          
+          jsonAttrVals <- process (Left (con, srcID, fileID)) logFile
           liftIO $ forM_ (HM.toList jsonAttrVals) $ \(attr,vs) ->
             insertJSONBAttributesValuesMergeOnConflict srcID attr (toJSON vs) con
           liftIO $ cleanupJSONBAttributesValues con
@@ -354,7 +377,12 @@ parse i row header rowFun validator outputHandle onError logFile = do {
       when (i > 0) $ BS.hPutStr outputFile " , "
       BS.hPutStr outputFile $ encodePretty res
       return Nothing ;
-} `catchError` (\e -> handleError onError logFile i e >> return Nothing)
+} `catchError` (\e -> handleError onError logFile maybeDBConn i e >> return Nothing)
+
+  where
+    maybeDBConn = case outputHandle of
+      Left c -> Just c
+      Right _ -> Nothing
 
 
 validate :: MonadError String m => (Value -> [ValidatorFailure]) -> Value -> m ()
@@ -363,11 +391,14 @@ validate validator res = case validator res of
   errors -> throwError $ intercalate "\n\n" $ map pValidatorFailure errors
 
 handleError :: (MonadError String m, Show i, MonadIO m) =>
-  ErrorOpts -> Maybe Handle -> i -> String -> m ()
-handleError Terminate _ lineNo err = 
-  throwError $ "Terminating with error on line " ++ show lineNo ++ ":\n" ++ err
-handleError LogToConsole _ lineNo err = 
+  ErrorOpts -> Maybe Handle -> Maybe (Connection, Int, Int) -> i -> String -> m ()
+handleError Terminate _ _ lineNo err = 
+  throwError $ "Terminating with error in row " ++ show lineNo ++ ":\n" ++ err
+handleError LogToConsole _ _ lineNo err = 
   liftIO $ putStrLn $ "Error on line " ++ show lineNo ++ ": " ++ err
-handleError LogToFile (Just logFile) lineNo err = 
-  liftIO $ hPutStrLn logFile $ "Error on line " ++ show lineNo ++ ": " ++ err
-handleError LogToFile Nothing _ _ = undefined 
+handleError LogToFile (Just logFile) _ lineNo err = 
+  liftIO $ hPutStrLn logFile $ "Error in row " ++ show lineNo ++ ": " ++ err
+handleError LogToDb _ (Just (con, srcID, fileID)) lineNo err = liftIO $ do
+  putStrLn $ "Error in row " ++ show lineNo ++ ": " ++ err
+  insertError srcID fileID ("Error in row " ++ show lineNo ++ ": " ++ err) con 
+handleError _ _ _ _ _ = undefined

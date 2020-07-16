@@ -37,11 +37,11 @@ DELETE FROM eavs_jsonb_attributes_values WHERE source_id = :sourceID
 
 -- name:insertJSONBOverrideOnConflict :: ()
 -- :sourceID :: Int
--- :file :: Int
+-- :fileID :: Int
 -- :subjectID :: String
 -- :jsonbData :: Value
 INSERT INTO eavs_jsonb(source_id, "fileName", subject_id, data) 
-  VALUES (:sourceID,:file,:subjectID,:jsonbData) 
+  VALUES (:sourceID,:fileID,:subjectID,:jsonbData) 
   ON CONFLICT (source_id, subject_id) DO UPDATE SET data = :jsonbData
 ;;;
 
@@ -65,14 +65,31 @@ UPDATE eavs_jsonb_attributes_values SET "values" = (
 ;;;
 
 
-
 -- name:insertEAV :: ()
 -- :uuid :: UUID
 -- :sourceID :: String
--- :fileName :: Int
+-- :fileID :: Int
 -- :subjectID :: String
 -- :attr :: Text
 -- :value :: Text
 INSERT INTO eavs(uid, source_id, "fileName", subject_id, type, attribute, value, elastic)
-	VALUES (:uuid, :sourceID, :fileName, :subjectID, 'attribute', :attr, :value, false);
+	VALUES (:uuid, :sourceID, :fileID, :subjectID, 'attribute', :attr, :value, false);
+;;;
+
+
+-- name:insertError :: ()
+-- :sourceID :: Int
+-- :fileID :: Int
+-- :message :: String
+INSERT INTO upload_error(source_id, error_id, message, error_code)
+	VALUES (:sourceID, :fileID, :message, 0)
+;;;
+
+
+-- name:clearErrors :: ()
+-- :sourceID :: Int
+-- :fileID :: Int
+DELETE FROM upload_error
+	WHERE source_id = :sourceID AND error_id = :fileID;
+
 |] 

@@ -52,8 +52,8 @@ extra-deps:
 - list-tuple-0.1.2.0@sha256:f2e4011a87124a3427024b5ceae6e2183556a4e17ceaeac902c7f5ee2aae47a5,2460
 - single-tuple-0.1.1.0@sha256:8dde826850b01f6b7ac053645e97e52e905e6e98cfbfec115c822ab7eb7e6dc5,1938
 # - postgresql-pure-0.1.2.0@sha256:a0bb37ab898c7a3e80b7e55af78ee39f0b63beaeb0e53727ac192aa0e4448a02,11649
-- github: iij-ii/postgresql-pure
-  commit: 9bd130d04fe2c5d53f6f726894484f5459a326da
+- postgresql-placeholder-converter-0.1.0.0@sha256:cc5ae9483bd8c965fd7db8a3e8e406d75b446318abecfdce5f2330bf220b8a56,2340
+- postgresql-pure-0.2.1.0
 allow-newer: true
 
 # Override default flag values for local packages and extra-deps

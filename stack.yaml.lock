@@ -67,6 +67,20 @@ packages:
       sha256: 83d204053a79ac4620f4e411830b869766912a8dd1ade5f20bbce7e8de0f817c
   original:
     hackage: single-tuple-0.1.1.0@sha256:8dde826850b01f6b7ac053645e97e52e905e6e98cfbfec115c822ab7eb7e6dc5,1938
+- completed:
+    hackage: postgresql-placeholder-converter-0.1.0.0@sha256:cc5ae9483bd8c965fd7db8a3e8e406d75b446318abecfdce5f2330bf220b8a56,2340
+    pantry-tree:
+      size: 608
+      sha256: 1a22ef9e412ed295f139f904f556f64317e43afcf2f66092ca8feed9bb2984c7
+  original:
+    hackage: postgresql-placeholder-converter-0.1.0.0@sha256:cc5ae9483bd8c965fd7db8a3e8e406d75b446318abecfdce5f2330bf220b8a56,2340
+- completed:
+    hackage: postgresql-pure-0.2.1.0@sha256:4a30e587bbc00982d7db286c555f28c3dd190e722da21fe4d6347178b6899739,12489
+    pantry-tree:
+      size: 3772
+      sha256: a30eaf7bdc62b5070875c20d81bd82862421faf4a0fe9b9ff7504775b051984b
+  original:
+    hackage: postgresql-pure-0.2.1.0
 snapshots:
 - completed:
     size: 496111

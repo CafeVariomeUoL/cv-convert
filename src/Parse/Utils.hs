@@ -1,6 +1,3 @@
-{-# LANGUAGE FlexibleContexts            #-}
-{-# LANGUAGE OverloadedStrings         #-}
-
 module Parse.Utils where
 
 import qualified Data.Aeson                 as JSON

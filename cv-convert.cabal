@@ -9,44 +9,24 @@ cabal-version:       >= 1.25
 
 executable cv-convert
   default-language:   Haskell2010
+  default-extensions:
+    RecordWildCards, FlexibleInstances, FlexibleContexts, DeriveGeneric, OverloadedStrings
   main-is: Main.hs
   build-depends: 
     cv-convert, 
-    base, 
-    mtl, 
-    scientific, 
+    base,
+    optparse-generic,
     aeson, 
     bytestring, 
-    unordered-containers, 
-    text, 
-    vector, 
-    lens, 
     filepath, 
-    pretty-simple, 
-    string-conv, 
-    aeson-pretty,
-    pcre-heavy,
-    optparse-generic,
     directory,
     load-env,
     postgresql-pure,
-    HDBC,
-    data-default-class,
-    transformers-base
+    data-default-class
   ghc-options: -Wall -O2
   if os(linux)
-
     ghc-options: -static
     ld-options: -static -pthread 
-    -- -lpq -L/lib -lssl -lcrypto 
-    -- pkgconfig-depends: openssl, libpq
-    -- -lpq -lpgport -lpgcommon -L/usr/lib/llvm10/lib -lssl -lcrypto -lm 
-    -- -lecpg -lecpg_compat -lpgcommon -lpgcommon_shlib  -lpgfeutils -lpgport -lpgtypes -lcrypto -lssl -lm -lpq 
-    
-    -- -lpgport -lldap -lopenssl -lcrypto -lpgcommon  -lz  -lm -lpq 
-    -- -lxml2 -ledit
-    -- extra-libraries: postgresql
-
 library
   build-depends:
     base, 
@@ -55,7 +35,9 @@ library
     containers, 
     mtl,
     transformers,
+    exceptions,
     aeson, 
+    aeson-pretty,
     scientific, 
     text, 
     vector, 
@@ -74,14 +56,21 @@ library
     HDBC,
     convertible,
     postgresql-pure,
-    uuid
+    uuid,
+    pcre-heavy,
+    filepath,
+    directory,
+    hjsonpointer
   hs-source-dirs:
     src
   exposed-modules:
-    Quickjs, Schema, Parse.Xlsx, Parse.Csv, DB, JSON.Utils
-  other-modules:       Quickjs.Internal, Parse.Utils
+    Runtime, Runtime.Error, Schema, Quickjs, Quickjs.Types, Quickjs.Error, JSON.Utils, DB
+  other-modules:
+    Parse.Xlsx, Parse.Csv, Parse.Utils
   default-language:
     Haskell2010
+  default-extensions:
+    DeriveGeneric, DeriveAnyClass, RecordWildCards, FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, OverloadedStrings, ScopedTypeVariables, DuplicateRecordFields
   Include-dirs: quickjs
   -- Order matters for dynamic linking, see GHC#12152.
   -- To make both `cabal repl` and `stack ghci` work, we have to
@@ -94,12 +83,14 @@ library
                 quickjs/quickjs.c,
                 quickjs/quickjs-libc.h,
                 quickjs/quickjs-libc.c
-  cc-options: -static -D_GNU_SOURCE -DCONFIG_VERSION="2020-04-12" -DCONFIG_BIGNUM -O2
+  cc-options: -static -D_GNU_SOURCE -DCONFIG_VERSION="2020-07-05" -DCONFIG_BIGNUM -O2
 
-  ghc-options: -Wall -O2 -fno-warn-orphans
+  ghc-options: 
+    -Wall -Wcompat
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wredundant-constraints 
+    -O2 -fno-warn-orphans
   if os(linux)
     ghc-options: -static
     ld-options: -static -pthread 
-    -- -lpq -L/lib -lssl -lcrypto 
-    -- pkgconfig-depends: libpq
-    -- extra-libraries: pgport xml2 ssl crypto com_err

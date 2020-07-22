@@ -1,17 +1,22 @@
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE QuasiQuotes, StandaloneDeriving #-}
 
-module Schema(Schema, ValidatorFailure, compileSchema, pValidatorFailure) where
-import Data.Aeson(Value, ToJSON, encode)
-import qualified Data.HashMap.Strict as HM
+module Schema(Schema, ValidatorFailure, compileSchema, validate) where
+import           GHC.Generics
+import           Control.Monad.Catch          (MonadThrow(..), Exception(..))
+import           Data.Aeson                   (Value, ToJSON(..), encode)
+import qualified Data.HashMap.Strict          as HM
+import qualified Data.Set                     as Set
+import           Data.String.Interpolate      (i)
+import           Data.Shorten
+import           Data.List.NonEmpty           (toList)
+import           Data.List.Split              (splitOn)
+import           Data.List                    (intercalate)
+import           Data.Char                    (isSpace)
 import           JSONSchema.Draft4
-import JSONSchema.Validator.Draft4
-import Data.String.Interpolate ( i )
-import Data.Shorten
-import Data.List.NonEmpty(toList)
-import Data.List.Split(splitOn)
-import Data.List(intercalate)
-import Data.Char (isSpace)
-import qualified Data.Set as Set
+import           JSONSchema.Validator.Draft4
+import           Runtime.Error
+import qualified JSONPointer
+import qualified Data.Text.Encoding.Error
 
 compileSchema :: Maybe Schema -> Either SchemaInvalid (Value -> [ValidatorFailure])
 compileSchema (Just s) = checkSchema (URISchemaMap HM.empty) (SchemaWithURI s Nothing)
@@ -134,5 +139,124 @@ prettySchemaType SchemaInteger = "Integer"
 prettySchemaType SchemaBoolean = "Boolean"
 prettySchemaType SchemaNull = "Null"
 
-pValidatorFailure :: ValidatorFailure -> [Char]
+pValidatorFailure :: ValidatorFailure -> String
 pValidatorFailure = intercalate "\n" . prettyValidatorFailure
+
+deriving instance Generic ValidatorFailure
+deriving instance ToJSON ValidatorFailure
+deriving instance Generic (OneOfInvalid ValidatorFailure)
+deriving instance ToJSON (OneOfInvalid ValidatorFailure)
+deriving instance Generic (AnyOfInvalid ValidatorFailure)
+deriving instance ToJSON (AnyOfInvalid ValidatorFailure)
+deriving instance Generic (AllOfInvalid ValidatorFailure)
+deriving instance ToJSON (AllOfInvalid ValidatorFailure)
+deriving instance Generic (RefInvalid ValidatorFailure)
+deriving instance ToJSON (RefInvalid ValidatorFailure)
+deriving instance Generic (PropertiesRelatedInvalid ValidatorFailure)
+deriving instance ToJSON (PropertiesRelatedInvalid ValidatorFailure)
+deriving instance Generic (DependenciesInvalid ValidatorFailure)
+deriving instance ToJSON (DependenciesInvalid ValidatorFailure)
+deriving instance Generic (APInvalid ValidatorFailure)
+deriving instance ToJSON (APInvalid ValidatorFailure)
+deriving instance Generic (AdditionalItemsInvalid ValidatorFailure)
+deriving instance ToJSON (AdditionalItemsInvalid ValidatorFailure)
+deriving instance Generic (ItemsInvalid ValidatorFailure)
+deriving instance ToJSON (ItemsInvalid ValidatorFailure)
+deriving instance Generic (DependencyMemberInvalid ValidatorFailure)
+deriving instance ToJSON (DependencyMemberInvalid ValidatorFailure)
+
+deriving instance Generic VisitedSchemas
+deriving instance ToJSON VisitedSchemas
+deriving instance Generic NotValidatorInvalid
+deriving instance ToJSON NotValidatorInvalid
+deriving instance Generic TypeValidatorInvalid
+deriving instance ToJSON TypeValidatorInvalid
+deriving instance Generic EnumInvalid
+deriving instance ToJSON EnumInvalid
+deriving instance Generic RequiredInvalid
+deriving instance ToJSON RequiredInvalid
+deriving instance Generic PatternInvalid
+deriving instance ToJSON PatternInvalid
+deriving instance Generic MinPropertiesInvalid
+deriving instance ToJSON MinPropertiesInvalid
+deriving instance Generic MaxPropertiesInvalid
+deriving instance ToJSON MaxPropertiesInvalid
+deriving instance Generic MinItemsInvalid
+deriving instance ToJSON MinItemsInvalid
+deriving instance Generic MaxItemsInvalid
+deriving instance ToJSON MaxItemsInvalid
+deriving instance Generic MinLengthInvalid
+deriving instance ToJSON MinLengthInvalid
+deriving instance Generic MaxLengthInvalid
+deriving instance ToJSON MaxLengthInvalid
+deriving instance Generic MinProperties
+deriving instance ToJSON MinProperties
+deriving instance Generic MaxProperties
+deriving instance ToJSON MaxProperties
+deriving instance Generic MinItems
+deriving instance ToJSON MinItems
+deriving instance Generic MaxItems
+deriving instance ToJSON MaxItems
+deriving instance Generic MinLength
+deriving instance ToJSON MinLength
+deriving instance Generic MaxLength
+deriving instance ToJSON MaxLength
+deriving instance Generic MinimumInvalid
+deriving instance ToJSON MinimumInvalid
+deriving instance Generic Minimum
+deriving instance ToJSON Minimum
+deriving instance Generic MaximumInvalid
+deriving instance ToJSON MaximumInvalid
+deriving instance Generic Maximum
+deriving instance ToJSON Maximum
+deriving instance Generic Required
+deriving instance ToJSON Required
+deriving instance Generic UniqueItemsInvalid
+deriving instance ToJSON UniqueItemsInvalid
+deriving instance Generic MultipleOfInvalid
+deriving instance ToJSON MultipleOfInvalid
+deriving instance Generic MultipleOf
+deriving instance ToJSON MultipleOf
+
+deriving instance Generic EnumValidator
+deriving instance ToJSON EnumValidator
+deriving instance Generic PatternValidator
+deriving instance ToJSON PatternValidator
+deriving instance ToJSON Regex
+
+deriving instance Generic JSONPointerError
+deriving instance ToJSON JSONPointerError
+
+
+deriving instance ToJSON JSONPointer.Index
+deriving instance ToJSON JSONPointer.Key
+deriving instance Generic JSONPointer.ResolutionError
+deriving instance ToJSON JSONPointer.ResolutionError
+deriving instance Generic JSONPointer.FormatError
+deriving instance ToJSON JSONPointer.FormatError
+
+deriving instance Generic Data.Text.Encoding.Error.UnicodeException
+deriving instance ToJSON Data.Text.Encoding.Error.UnicodeException
+
+
+data ValidatorFailureError = ValidatorFailureError {
+  errors :: [ValidatorFailure]
+} deriving Generic
+
+instance Show ValidatorFailureError where
+    show ValidatorFailureError{..} = intercalate "\n" $ map pValidatorFailure errors
+
+instance Exception ValidatorFailureError where
+    toException = runtimeExceptionToException
+    fromException = runtimeExceptionFromException
+
+
+instance ToJSON ValidatorFailureError where
+  toJSON = genericExceptionToJSON
+
+
+
+validate :: MonadThrow m => (Value -> [ValidatorFailure]) -> Value -> m ()
+validate validator res = case validator res of
+  [] -> return ()
+  errors -> throwM $ ValidatorFailureError errors

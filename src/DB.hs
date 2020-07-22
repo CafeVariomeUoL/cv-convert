@@ -1,6 +1,21 @@
-{-#LANGUAGE QuasiQuotes, MultiParamTypeClasses #-}
+{-#LANGUAGE QuasiQuotes, DerivingStrategies, GeneralizedNewtypeDeriving #-}
 
-module DB where
+module DB(
+  SourceID(..), SubjectID(..), FileID,
+  getFileID,
+
+  insertJSONBOverrideOnConflict,
+  deleteSouceFromEAVSJSONB,
+
+  insertJSONBAttributesValuesMergeOnConflict,
+  deleteSouceFromEAVSJSONBAttributesValues,
+  cleanupJSONBAttributesValues,
+
+  insertEAV,
+
+  insertError, 
+  clearErrors
+) where
 import Database.HDBC
 import Database.YeshQL.HDBC
 import Data.Aeson           (Value, encode)
@@ -16,29 +31,36 @@ instance Convertible UUID SqlValue where
   safeConvert v = return $ SqlByteString $ toASCIIBytes v
 
 
+newtype SourceID = SourceID {unSourceID :: Int} deriving (Read, Show, Eq)
+
+instance Convertible SourceID SqlValue where
+  safeConvert (SourceID v) = safeConvert v
+
+
+newtype SubjectID = SubjectID {unSubjectID :: String}
+
+instance Convertible SubjectID SqlValue where
+  safeConvert (SubjectID v) = safeConvert v
+
+
+newtype FileID = FileID {unFileID :: Int} deriving newtype (Convertible SqlValue)
+
+instance Convertible FileID SqlValue where
+  safeConvert (FileID v) = safeConvert v
+
+
 [yesh|
--- name:getFileID :: (Int)
--- :sourceID :: Int
+-- name:getFileID :: (FileID)
+-- :sourceID :: SourceID
 -- :fileName :: String
 SELECT "ID" FROM uploaddatastatus WHERE source_id = :sourceID AND "FileName" = :fileName
 ;;;
 
 
--- name:deleteSouceFromEAVSJSONB :: ()
--- :sourceID :: Int
-DELETE FROM eavs_jsonb WHERE source_id = :sourceID
-;;;
-
-
--- name:deleteSouceFromEAVSJSONBAttributesValues :: ()
--- :sourceID :: Int
-DELETE FROM eavs_jsonb_attributes_values WHERE source_id = :sourceID
-;;;
-
 -- name:insertJSONBOverrideOnConflict :: ()
--- :sourceID :: Int
--- :fileID :: Int
--- :subjectID :: String
+-- :sourceID :: SourceID
+-- :fileID :: FileID
+-- :subjectID :: SubjectID
 -- :jsonbData :: Value
 INSERT INTO eavs_jsonb(source_id, "fileName", subject_id, data) 
   VALUES (:sourceID,:fileID,:subjectID,:jsonbData) 
@@ -46,13 +68,25 @@ INSERT INTO eavs_jsonb(source_id, "fileName", subject_id, data)
 ;;;
 
 
+-- name:deleteSouceFromEAVSJSONB :: ()
+-- :sourceID :: SourceID
+DELETE FROM eavs_jsonb WHERE source_id = :sourceID
+;;;
+
+
 -- name:insertJSONBAttributesValuesMergeOnConflict :: ()
--- :sourceID :: Int
+-- :sourceID :: SourceID
 -- :attr :: Value
 -- :values :: Value
 INSERT INTO eavs_jsonb_attributes_values(source_id, attribute, "values") 
   VALUES (:sourceID,:attr,:values) 
   ON CONFLICT (source_id, attribute) DO UPDATE SET "values" = eavs_jsonb_attributes_values."values" || :values
+;;;
+
+
+-- name:deleteSouceFromEAVSJSONBAttributesValues :: ()
+-- :sourceID :: SourceID
+DELETE FROM eavs_jsonb_attributes_values WHERE source_id = :sourceID
 ;;;
 
 
@@ -65,11 +99,11 @@ UPDATE eavs_jsonb_attributes_values SET "values" = (
 ;;;
 
 
--- name:insertEAV :: ()
+-- name:insertEAV_ :: ()
 -- :uuid :: UUID
 -- :sourceID :: String
--- :fileID :: Int
--- :subjectID :: String
+-- :fileID :: FileID
+-- :subjectID :: SubjectID
 -- :attr :: Text
 -- :value :: Text
 INSERT INTO eavs(uid, source_id, "fileName", subject_id, type, attribute, value, elastic)
@@ -78,8 +112,8 @@ INSERT INTO eavs(uid, source_id, "fileName", subject_id, type, attribute, value,
 
 
 -- name:insertError :: ()
--- :sourceID :: Int
--- :fileID :: Int
+-- :sourceID :: SourceID
+-- :fileID :: FileID
 -- :message :: String
 INSERT INTO upload_error(source_id, error_id, message, error_code)
 	VALUES (:sourceID, :fileID, :message, 0)
@@ -87,9 +121,13 @@ INSERT INTO upload_error(source_id, error_id, message, error_code)
 
 
 -- name:clearErrors :: ()
--- :sourceID :: Int
--- :fileID :: Int
+-- :sourceID :: SourceID
+-- :fileID :: FileID
 DELETE FROM upload_error
 	WHERE source_id = :sourceID AND error_id = :fileID;
 
 |] 
+
+insertEAV :: IConnection conn =>
+  UUID -> SourceID -> FileID -> SubjectID -> Text -> Text -> conn -> IO ()
+insertEAV uuid (SourceID sID) fileID subjectID attr value = insertEAV_ uuid (show sID) fileID subjectID attr value

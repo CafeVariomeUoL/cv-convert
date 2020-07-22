@@ -1,9 +1,4 @@
-{-# LANGUAGE DeriveGeneric             #-}
-{-# LANGUAGE FlexibleContexts          #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
-{-# LANGUAGE OverloadedStrings         #-}
-{-# LANGUAGE RecordWildCards           #-}
-{-# LANGUAGE FlexibleInstances         #-}
 
 module Parse.Xlsx (readXlsxFile) where
 
@@ -17,7 +12,7 @@ import qualified Data.Map.Strict            as M
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import           Control.Monad.IO.Class     (MonadIO)
-import           Data.List                  (sortOn)
+import           Data.List                  (sortOn, find)
 import           Parse.Utils
 
 -- Adapted from https://github.com/nkpart/xlsx2yaml/blob/master/src/Lib.hs
@@ -27,10 +22,13 @@ type Sheet r c v = M.Map (r, c) v
 
 
 
-readXlsxFile :: MonadIO m => FilePath -> m [([JSON.Value], [JSON.Value])]
-readXlsxFile inFile = do
+readXlsxFile :: MonadIO m => FilePath -> Maybe T.Text -> m (Maybe ([JSON.Value], [JSON.Value]))
+readXlsxFile inFile sheetName = do
     Xlsx{..} <- liftIO $ toXlsx <$> L.readFile inFile
-    return $ fmap (sheetToValue 2 . snd) _xlSheets
+    case (sheetName, _xlSheets) of
+      (_, []) -> return Nothing
+      (Nothing, ((_,d):_)) -> return $ Just $ sheetToValue 2 d
+      (Just sheet, _) -> return $ fmap (sheetToValue 2 . snd) $ find (\(s,_) -> s == sheet) _xlSheets
 
 
 -- | Encode a worksheet as a JSON Object.

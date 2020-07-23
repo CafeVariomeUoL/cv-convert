@@ -1,6 +1,18 @@
 {-# LANGUAGE BangPatterns, QuasiQuotes, TemplateHaskell #-}
 
-module Quickjs (JSValue, JSEvalType(..), JSContextPtr, quickjs, call_, eval, withJSValue) where
+{-|
+Module      : Quickjs
+Description : QuickJS Haskell bindings
+Copyright   : (c) Samuel Balco, 2020
+License     : MIT
+Maintainer  : sam@definitelynotspam.email
+
+This is a very basic wrapper for the [QuickJS library](https://bellard.org/quickjs/).
+
+The current functionality includes evaluating JS code, calling a JS function in the global scope
+and marshalling 'Value's to and from 'JSValue's.
+-}
+module Quickjs (JSValue, JSContextPtr, quickjs, call, eval, eval_, withJSValue) where
 
 import Foreign
 import Foreign.C
@@ -182,13 +194,15 @@ jsonToJSValue ctxPtr (Object o) = do
 
     code <- liftIO (with objVal $ \objValPtr -> with val $ \valPtr -> 
       withCString (toS key) $ \cstringPtr -> do
-        [C.block| int { return JS_DefinePropertyValueStr(
+        [C.block| int { 
+          return JS_DefinePropertyValueStr(
             $(JSContext *ctxPtr), 
             *$(JSValueConst *objValPtr),
             $(const char *cstringPtr),
             *$(JSValueConst *valPtr),
             JS_PROP_C_W_E
-          ); } |])
+          ); 
+        } |])
 
     when (code < 0) $ do
       liftIO $ jsFreeValue ctxPtr objVal
@@ -398,39 +412,67 @@ evalRaw ctx eTyp code =
 
 
 
-eval :: (MonadThrow m, MonadReader JSContextPtr m, MonadIO m) => JSEvalType -> String -> m JSValue
-eval eTyp code = do
+evalAs :: (MonadMask m, MonadReader JSContextPtr m, MonadIO m) => JSEvalType -> String -> m Value
+evalAs eTyp code = do
   ctx <- ask
   val <- liftIO $ evalRaw ctx eTyp code
   checkIsExpcetion ctx val
-  return val
+  jsToJSON ctx val `finally` freeJSValue val
 
 
-toJSValue :: Aeson.ToJSON a => (MonadCatch m, MonadReader JSContextPtr m, MonadIO m) => a -> m JSValue
-toJSValue v = do
+
+{-|
+Evaluates the given string and returns a 'Value' (if the result can be converted).
+-}
+eval :: (MonadMask m, MonadReader JSContextPtr m, MonadIO m) => String -> m Value
+eval = evalAs Global
+
+evalAs_ :: (MonadThrow m, MonadReader JSContextPtr m, MonadIO m) => JSEvalType -> String -> m ()
+evalAs_ eTyp code = do
   ctx <- ask
-  val <- jsonToJSValue ctx (Aeson.toJSON v)
-  checkIsExpcetion ctx val `catch` (\(e:: JSRuntimeException) -> do {freeJSValue val ; throwM e})
-  return val
-
-
-fromJSValue_ :: (MonadCatch m, MonadReader JSContextPtr m, MonadIO m) => JSValue -> m Value
-fromJSValue_ val = do
-  ctx <- ask
-  jsToJSON ctx val
+  val <- liftIO $ evalRaw ctx eTyp code
+  checkIsExpcetion ctx val
+  freeJSValue val
 
 
 
-fromJSValue :: (Aeson.FromJSON a, MonadCatch m, MonadReader JSContextPtr m, MonadIO m) => JSValue -> m a
-fromJSValue val = do
-  jsonval <- fromJSValue_ val
+{-|
+More efficient than 'eval' if we don't care about the value of the expression, 
+e.g. if we are evaluating a function definition or performing other side-effects such as
+printing to console/modifying state.
+-}
+eval_ :: (MonadThrow m, MonadReader JSContextPtr m, MonadIO m) => String -> m ()
+eval_ = evalAs_ Global
 
-  case Aeson.fromJSON jsonval of
-    Aeson.Success a -> return a
-    Aeson.Error err -> throwM $ InternalError err
+-- toJSValue :: Aeson.ToJSON a => (MonadCatch m, MonadReader JSContextPtr m, MonadIO m) => a -> m JSValue
+-- toJSValue v = do
+--   ctx <- ask
+--   val <- jsonToJSValue ctx (Aeson.toJSON v)
+--   checkIsExpcetion ctx val `catch` (\(e:: JSRuntimeException) -> do {freeJSValue val ; throwM e})
+--   return val
+
+
+-- fromJSValue_ :: (MonadCatch m, MonadReader JSContextPtr m, MonadIO m) => JSValue -> m Value
+-- fromJSValue_ val = do
+--   ctx <- ask
+--   jsToJSON ctx val
 
 
 
+-- fromJSValue :: (Aeson.FromJSON a, MonadCatch m, MonadReader JSContextPtr m, MonadIO m) => JSValue -> m a
+-- fromJSValue val = do
+--   jsonval <- fromJSValue_ val
+
+--   case Aeson.fromJSON jsonval of
+--     Aeson.Success a -> return a
+--     Aeson.Error err -> throwM $ InternalError err
+
+
+
+{-|
+Takes a value with a defined 'ToJSON' instance. This value is marshalled to a 'JSValue'
+and passed as an argument to the callback function, provided as the second argument to 'withJSValue'
+-}
 withJSValue :: (MonadMask m, MonadReader JSContextPtr m, MonadIO m, Aeson.ToJSON a) => a -> (JSValue -> m b) -> m b
 withJSValue v f = do
   ctx <- ask
@@ -464,17 +506,17 @@ callRaw ctxPtr funName args = do
       _ -> throwM $ JSValueIncorrectType {name = funName, expected = JSTypeFromTag JSTagObject, found = ty }
 
 
-call :: (MonadThrow m, MonadReader JSContextPtr m, MonadIO m) => String -> [JSValue] -> m JSValue
+-- call :: (MonadThrow m, MonadReader JSContextPtr m, MonadIO m) => String -> [JSValue] -> m JSValue
+-- call funName args = do
+--   ctx <- ask
+--   val <- callRaw ctx funName args
+--   checkIsExpcetion ctx val
+--   return val
+
+
+
+call :: (MonadMask m, MonadReader JSContextPtr m, MonadIO m) => String -> [JSValue] -> m Value
 call funName args = do
-  ctx <- ask
-  val <- callRaw ctx funName args
-  checkIsExpcetion ctx val
-  return val
-
-
-
-call_ :: (MonadMask m, MonadReader JSContextPtr m, MonadIO m) => String -> [JSValue] -> m Value
-call_ funName args = do
   ctx <- ask
   val <- callRaw ctx funName args
   do { checkIsExpcetion ctx val; jsToJSON ctx val } `finally` freeJSValue val
@@ -485,7 +527,30 @@ freeJSValue val = do
   ctx <- ask
   liftIO $ jsFreeValue ctx val
 
--- quickjs :: (MonadIO m, MonadThrow m) => m b -> m b
+{-|
+This function initialises a new JS runtime and performs the given computation within this context.
+
+For example, we can evaluate an expression:
+
+>quickjs $ do
+>  res <- eval "1+2"
+>  liftIO $ print res
+
+Declare a function and call it on an argument:
+
+>quickjs $ do
+>  _ <- eval_ "f = (x) => x+1"
+>  res <- eval "f(2)"
+>  liftIO $ print res
+
+Pass a Haskell value to the JS runtime:
+
+>quickjs $ do
+>  _ <- eval_ "f = (x) => x+1"
+>  res <- withJSValue (3::Int) $ \x -> call "f" [x]
+>  liftIO $ print res
+
+-}
 quickjs :: MonadIO m => ReaderT (Ptr JSContext) m b -> m b
 quickjs f = do
   rt <- liftIO $ jsNewRuntime
@@ -496,14 +561,12 @@ quickjs f = do
   } |]
 
   res <- (runReaderT f ctx) --`catchError` (\e -> do { cleanup ctx rt ; throwError e })
-  -- we dont do cleanup, because there appears to be a leak:
-  -- Assertion failed: (list_empty(&rt->gc_obj_list)), function JS_FreeRuntime, file quickjs/quickjs.c, line 1963.
-  -- cleanup ctx rt
+  cleanup ctx rt
   return res
-  -- where
-    -- cleanup ctx rt = liftIO $ do
-      -- jsFreeContext ctx
-      -- jsFreeRuntime rt
+  where
+    cleanup ctx rt = liftIO $ do
+      jsFreeContext ctx
+      jsFreeRuntime rt
 
 -- -- quickjsIO :: IO a -> IO a
 -- quickjsIO f = quickjs f `catch` \(err::JSRuntimeException) -> do

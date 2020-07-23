@@ -17,6 +17,13 @@ import           Data.String.Conv             (toS)
 
 import           DB
 
+
+
+{-|
+Data type used to describe the error reporting/handling behaviour when processing a row. 
+Other than 'Terminate, all other options result in the error from a row being recorded/printed,
+with the computation continuing onto the next row.
+-}
 data ErrorOpts = Terminate | LogToConsole | LogToFile | LogToDb deriving (Show, Eq, Generic)
 
 instance FromJSON ErrorOpts where
@@ -53,15 +60,15 @@ genericExceptionToJSON = genericToJSON defaultOptions
 
 
 
-data SubjectIdNotFound = SubjectIdNotFound deriving (Generic, Typeable)
+data SubjectIDNotFound = SubjectIDNotFound deriving (Generic, Typeable)
 
-instance Show SubjectIdNotFound where
+instance Show SubjectIDNotFound where
   show _ = "subject_id is required"
 
-instance ToJSON SubjectIdNotFound where
+instance ToJSON SubjectIDNotFound where
   toJSON = genericExceptionToJSON
 
-instance Exception SubjectIdNotFound where
+instance Exception SubjectIDNotFound where
   toException   = runtimeExceptionToException
   fromException = runtimeExceptionFromException
 
@@ -94,15 +101,15 @@ instance Exception CSVParseError where
 
 
 
-data FileIDCouldNotBefound = FileIDCouldNotBefound {file :: String} deriving (Generic, Typeable)
+data FileIDNotFound = FileIDNotFound {file :: String} deriving (Generic, Typeable)
 
-instance Show FileIDCouldNotBefound where
-  show FileIDCouldNotBefound{..} = "File ID for '" ++ (takeFileName file) ++ "' could not be found."
+instance Show FileIDNotFound where
+  show FileIDNotFound {..} = "File ID for '" ++ (takeFileName file) ++ "' could not be found."
 
-instance ToJSON FileIDCouldNotBefound where
+instance ToJSON FileIDNotFound where
   toJSON = genericExceptionToJSON
 
-instance Exception FileIDCouldNotBefound where
+instance Exception FileIDNotFound where
   toException   = runtimeExceptionToException
   fromException = runtimeExceptionFromException
 

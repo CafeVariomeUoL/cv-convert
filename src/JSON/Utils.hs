@@ -13,14 +13,14 @@ import           Control.Monad.IO.Class(MonadIO, liftIO)
 import           Control.Monad.Catch   (MonadThrow(..))
 import           Data.Foldable         (foldlM)
 
-import           Runtime.Error         (SubjectIdNotFound(..))
+import           Runtime.Error         (SubjectIDNotFound(..))
 import           Quickjs.Error         (InternalError(..))
 import           DB                    (SubjectID(..))
 
 getSubjectID :: MonadThrow m => Value -> m SubjectID
 getSubjectID (Object m) = case HM.lookup "subject_id" m of
   Just x -> return $ SubjectID $ show x
-  Nothing ->  throwM $ SubjectIdNotFound
+  Nothing ->  throwM $ SubjectIDNotFound
 getSubjectID o = throwM $ InternalError $ "Expected " ++ show o ++ " to be an object."
 
 

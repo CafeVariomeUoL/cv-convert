@@ -1,11 +1,18 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# OPTIONS_HADDOCK ignore-exports #-}
 
+{-|
+Module      : Runtime
+Description : Main entrypoint to cv-convert
+Copyright   : (c) Samuel Balco, 2020
+License     : MIT
+Maintainer  : sam@definitelynotspam.email
+
+The runtime module exports the main functionality of the cv-convert tool.
+-}
 module Runtime(SourceID, FileType(..), readFileType, SheetName, Settings(..), loadLibrary, processFile) where
 
 import           GHC.Generics
-
--- import           Options.Generic
 import           Text.Regex.PCRE.Heavy
 import           System.IO                    (openFile, IOMode(..), Handle, hClose)
 import           Data.Aeson                   (Value(..), FromJSON(..), decode, toJSON, genericParseJSON, defaultOptions, constructorTagModifier)
@@ -30,9 +37,8 @@ import           Database.HDBC.PostgreSQL.Pure(Config(..), Connection, connect)
 import           Database.HDBC.Types          (IConnection(commit, disconnect))
 
 import           Runtime.Error
-import           Quickjs.Error (InternalError(..))
-
 import           Quickjs
+import           Quickjs.Error                (InternalError(..))
 import           Schema
 import           Parse.Xlsx
 import           Parse.Csv
@@ -46,7 +52,7 @@ instance FromJSON FileType where
 
 
 {-|
-Parses a file extension, such as @.txt@ into 'FileType's 'TXT'. 
+Parses a file extension, such as @.txt@ into 'TXT'. 
 Returns 'Nothing' if the extension does not mach any of the 'FileType's.
 -}
 readFileType :: String -> Maybe FileType
@@ -78,11 +84,11 @@ context. Quickjs does not currently support importing modules in the global mode
 However, we want to share the library between the react front-end client and this tool,
 so we do a bit of hackery to get the lib working for both. As aresult, the library must have the following "shape":
 
-> let Utils = {
->   fun1: function(a) {...},
->   fun2: ...
-> }
-> export default Utils
+>let Utils = {
+>  fun1: function(a) {...},
+>  fun2: ...
+>}
+>export default Utils
 
 Once loaded, the functions are available inside the Quickjs interpreter under @Utils.fun1@, etc.
 -}
@@ -93,10 +99,10 @@ loadLibrary libPath = do
   libExists <- liftIO $ doesFileExist libPath
   when libExists $ do
     f <- liftIO $ readFile libPath
-    -- rather hacky way to remove the keyword default from the lib.js module
-    -- wehave to do this because quickjs won't let us import and use es modules.
+    -- rather hacky way to remove the keyword default from the lib module
+    -- we have to do this because quickjs won't let us import and use JS modules
     let f' = gsub [re|export\s+default|] ("" :: String) f
-    _ <- eval Global $ f'
+    _ <- eval_ f'
     liftIO $ print ("loaded lib" :: String)
     return ()
   return ()
@@ -119,19 +125,20 @@ When inserting into database, the output is stored in two different tables:
 
 Finally, we return result of running 'createAllPathsWithValues' on the JSON output data.
 -}
-parse :: (MonadMask m, MonadIO m) =>
+convertRow :: (MonadMask m, MonadIO m) =>
      Int -- ^ Row index/counter
   -> row -- ^ Row data
   -> header -- ^ Row header
   -> (row -> header -> m Value) -- ^ Coverter function taking the row and header returning a JSON 'Value'
   -> (Value -> [ValidatorFailure]) -- ^ Validator function, used to check that the output of the converter function
                                    -- conforms to the JSON schema, specified in 'jsonSchema'
-  -> Either (Connection, SourceID, FileID) Handle -- ^ Either a Database connection or a file handle, depending on where we output data
+  -> Either (Connection, SourceID, FileID) Handle -- ^ Either a Database connection or a file handle, 
+                                                  -- depending on where we output data
   -> ErrorOpts
   -> Maybe Handle -- ^ Optional handle to a log file, if 'LogToFile' is passed to the 'ErrorOpts' argument
   -> m (Maybe (HM.HashMap Value (S.HashSet Value))) -- ^ returns a map from JSON 'Value's to a set of 'Value's, 
                                                     -- by calling 'createAllPathsWithValues' on the converter function output
-parse i row header rowFun validator outputHandle onError logFile = do {  
+convertRow i row header rowFun validator outputHandle onError logFile = do {  
   res <- rowFun row header;
   validate validator res ;
   subjectID <- getSubjectID res ;
@@ -156,9 +163,14 @@ parse i row header rowFun validator outputHandle onError logFile = do {
       Right _ -> Nothing
 
 
-
+{-|
+Helper function which loops over the rows of the given input, 
+collecting and merging all the resulting maps (generated inside 'convertRow' via 'createAllPathsWithValues') 
+-}
 processRow :: (FoldableWithIndex Int f, MonadThrow m) => 
-  f a -> (Int -> a -> m (Maybe (HM.HashMap Value (S.HashSet Value)))) -> m (HM.HashMap Value (S.HashSet Value))
+       f row -- ^ Any list like data structure containing rows we can loop over with an index
+    -> (Int -> row -> m (Maybe (HM.HashMap Value (S.HashSet Value)))) -- ^ Function that consumes the row together with it's index
+    -> m (HM.HashMap Value (S.HashSet Value))
 processRow input m = ifoldlM (\i jsonAttrValsAcc l -> do
     jsonAttrValsMaybe <- m i l
     case jsonAttrValsMaybe of 
@@ -183,7 +195,7 @@ processTxtFile rowFun validator fName logFile onError startFromLine outputHandle
     processRow (Text.lines txt) $ \i l ->
       if (i < startFromLine) then return Nothing
       else withJSValue (Object $ HM.fromList [("i" , toJSON i), ("data" , toJSON l)]) $ \row ->
-        parse i row header rowFun validator outputHandle onError logFile
+        convertRow i row header rowFun validator outputHandle onError logFile
   
 
 
@@ -203,7 +215,7 @@ processXlsxFile rowFun validator fName sheetName logFile onError outputHandle = 
       withJSValue (toJSON h) $ \header ->
         processRow rows $ \i r -> 
           withJSValue r $ \row ->
-            parse i row header rowFun validator outputHandle onError logFile
+            convertRow i row header rowFun validator outputHandle onError logFile
     Nothing -> case sheetName of
       Just (SheetName s) -> throwM $ SheetNotFound s
       Nothing -> throwM $ InternalError $ "No sheets found in file."
@@ -223,7 +235,7 @@ processCsvFile rowFun validator fName logFile onError outputHandle = do
   withJSValue h $ \header ->
     processRow rows $ \i r ->
       withJSValue (Object $ HM.insert "i" (toJSON i) r) $ \row ->
-        parse i row header rowFun validator outputHandle onError logFile
+        convertRow i row header rowFun validator outputHandle onError logFile
 
 
 processJsonFile :: (MonadMask m, MonadIO m, MonadReader JSContextPtr m) =>
@@ -245,7 +257,7 @@ processJsonFile rowFun validator fName logFile onError outputHandle = do
   withJSValue (Object $ HM.fromList $ map (\h -> ("h", toJSON h)) hs) $ \header ->
     processRow rows $ \i r -> do
       withJSValue (insertI i r) $ \row ->
-        parse i row header rowFun validator outputHandle onError logFile
+        convertRow i row header rowFun validator outputHandle onError logFile
    
   where
     getHeader (Object o) = HM.keys o
@@ -272,7 +284,6 @@ processFile dbConnInfo source_id rowFun validator fName sheetName fType onError 
   logFile <- liftIO $ case onError of
     LogToFile -> writeFile (fName -<.> "log") "" >> openFile (fName -<.> "log") AppendMode >>= return . Just
     _ -> return Nothing
-  
 
   -- if we have db conn info, we will be writing into the db instead of a file
   case (dbConnInfo, source_id) of
@@ -291,7 +302,7 @@ processFile dbConnInfo source_id rowFun validator fName sheetName fType onError 
           liftIO $ forM_ (HM.toList jsonAttrVals) $ \(attr,vs) ->
             insertJSONBAttributesValuesMergeOnConflict srcID attr (toJSON vs) con
           liftIO $ cleanupJSONBAttributesValues con
-        Nothing -> throwM $ FileIDCouldNotBefound fName
+        Nothing -> throwM $ FileIDNotFound  fName
       liftIO $ do
         commit con
         disconnect con

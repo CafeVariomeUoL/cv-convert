@@ -1,4 +1,4 @@
-{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE ExistentialQuantification, DuplicateRecordFields #-}
 
 module Quickjs.Error where
 import           Control.Exception (Exception(..), SomeException)

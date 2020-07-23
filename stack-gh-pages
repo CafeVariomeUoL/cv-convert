@@ -1,5 +1,4 @@
 #!/bin/bash -e
-git checkout master
 pname=cv-convert
 echo ">>> Building Haddock for $pname"
 time stack haddock --no-haddock-deps --fast

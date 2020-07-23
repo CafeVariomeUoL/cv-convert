@@ -80,7 +80,7 @@ main = do
           quickjs $ do
             lib <- liftIO $ lookupEnv "jslib"
             loadLibrary (fromMaybe "./lib.js" lib)
-            _ <- eval Global $ "rowFun = (row, header) => { " ++ processFunction ++ " }"
+            _ <- eval_ $ "rowFun = (row, header) => { " ++ processFunction ++ " }"
             
             processFile 
               dbConnInfo 
@@ -95,7 +95,7 @@ main = do
     Nothing -> putStrLn "Invalid Settings file"
 
   where
-    rowFun row header = call_ "rowFun" [row, header]
+    rowFun row header = call "rowFun" [row, header]
 
     -- if we specifed logging in the settings file, we use that setting
     -- if we have a DB connection and haven't explicitly specified logging, we default to logging erros to db

@@ -94,8 +94,6 @@ Once loaded, the functions are available inside the Quickjs interpreter under @U
 -}
 loadLibrary :: (MonadThrow m, MonadIO m, MonadReader JSContextPtr m) => FilePath -> m ()
 loadLibrary libPath = do
-  liftIO $ print $ "lib path: " ++ libPath
-
   libExists <- liftIO $ doesFileExist libPath
   when libExists $ do
     f <- liftIO $ readFile libPath
@@ -103,7 +101,6 @@ loadLibrary libPath = do
     -- we have to do this because quickjs won't let us import and use JS modules
     let f' = gsub [re|export\s+default|] ("" :: String) f
     _ <- eval_ f'
-    liftIO $ print ("loaded lib" :: String)
     return ()
   return ()
 

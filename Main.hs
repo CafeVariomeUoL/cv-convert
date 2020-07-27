@@ -79,6 +79,7 @@ main = do
           quickjs $ do
             lib <- liftIO $ lookupEnv "jslib"
             loadLibrary (fromMaybe "./lib.js" lib)
+            liftIO $ print ("loaded lib at: " ++ (fromMaybe "./lib.js" lib) :: String)
             _ <- eval_ $ "rowFun = (row, header) => { " ++ processFunction ++ " }"
             
             processFile 

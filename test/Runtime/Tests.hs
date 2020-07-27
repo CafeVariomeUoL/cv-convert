@@ -20,7 +20,7 @@ import           Quickjs
 
 
 lib_js = [i|let Utils = {
-  helloWorld: function() {return 1}
+  helloWorld: function() {return 1;}
 }
 export default Utils;|]
 

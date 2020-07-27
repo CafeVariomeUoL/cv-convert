@@ -6,7 +6,7 @@ Document converter used inside [CafeVariomeCI4](https://github.com/CafeVariomeUo
 ## Documentation
 Haddocs documentation is available at: https://cafevariomeuol.github.io/cv-convert/
 
-To rebuild the docs, commit all changes to your current branch and run './stack-gh-pages' 
+To rebuild the docs, commit all changes to your current branch and run `./stack-gh-pages` 
 
 ## Tests
 

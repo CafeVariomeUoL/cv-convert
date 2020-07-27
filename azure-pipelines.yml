@@ -24,6 +24,7 @@ steps:
   inputs:
     key: '"stack-v1" | "$(Agent.OS)" | $(Build.SourcesDirectory)/stack.yaml.lock'
     path: .azure-cache
+    cacheHitVar: CACHE_RESTORED
   displayName: Download Cache
 - bash: |
     mkdir -p $STACK_ROOT
@@ -31,6 +32,7 @@ steps:
     mkdir -p .stack-work
     tar -vxzf .azure-cache/stack-work.tar.gz
   displayName: "Unpack cache"
+  condition: eq(variables.CACHE_RESTORED, 'true')
 - script: |
     mkdir -p ~/.local/bin
     curl -L https://get.haskellstack.org/stable/linux-x86_64.tar.gz | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'

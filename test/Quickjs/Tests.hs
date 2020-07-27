@@ -16,7 +16,7 @@ import           Quickjs
 
 eval_1_plus_2 :: Assertion
 eval_1_plus_2 = quickjs $ do
-  v <- eval "1+2"
+  v <- eval "1+2;"
   liftIO $ v @?= Number 3
 
 genText = do 

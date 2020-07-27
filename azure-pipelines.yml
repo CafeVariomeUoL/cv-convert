@@ -1,7 +1,12 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
+# This is a simple Azure configuration, which is intended for use
+# on applications which do not require cross-platform and
+# multiple-GHC-version support. For more information and other
+# options, see:
+#
+# https://docs.haskellstack.org/en/stable/azure_ci/
+#
+# Copy these contents into the root directory of your Github project in a file
+# named azure-pipelines.yml
 
 trigger:
 - master
@@ -10,10 +15,16 @@ pool:
   vmImage: 'ubuntu-latest'
 
 steps:
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
-
 - script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
+    mkdir -p ~/.local/bin
+    curl -L https://get.haskellstack.org/stable/linux-x86_64.tar.gz | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
+  displayName: Install Stack
+- script: |
+    export PATH=$HOME/.local/bin:$PATH
+    stack --no-terminal --install-ghc test --only-dependencies
+  displayName: Build Dependencies
+- script: |
+    export PATH=$HOME/.local/bin:$PATH
+    # Build the package, its tests, and its docs and run the tests
+    stack test --haddock --no-haddock-deps
+  displayName: Test Package

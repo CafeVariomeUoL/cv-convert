@@ -22,7 +22,7 @@ import           DB                    (SubjectID(..))
 
 getSubjectID :: MonadThrow m => Value -> m SubjectID
 getSubjectID (Object m) = case HM.lookup "subject_id" m of
-  Just x -> return $ SubjectID $ show x
+  Just x -> return $ SubjectID $ toS $ encode x
   Nothing ->  throwM $ SubjectIDNotFound
 getSubjectID o = throwM $ InternalError $ "Expected " ++ show o ++ " to be an object."
 

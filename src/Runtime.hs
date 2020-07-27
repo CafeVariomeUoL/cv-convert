@@ -10,7 +10,7 @@ Maintainer  : sam@definitelynotspam.email
 
 The runtime module exports the main functionality of the cv-convert tool.
 -}
-module Runtime(SourceID, FileType(..), readFileType, SheetName, Settings(..), loadLibrary, processFile) where
+module Runtime(SourceID, FileType(..), readFileType, SheetName, Settings(..), loadLibrary, processFile, compileSchema) where
 
 import           GHC.Generics
 import           Text.Regex.PCRE.Heavy
@@ -24,7 +24,7 @@ import qualified Data.Text.IO                 as Text
 import           Control.Monad.IO.Class       (MonadIO, liftIO)
 import           Control.Monad                (when, forM_)
 import qualified Data.HashMap.Strict          as HM
-import           Control.Monad.Catch          (MonadThrow(..), MonadMask(..), catch)
+import           Control.Monad.Catch          (MonadThrow(..), MonadMask(..), catch, bracket)
 import           Control.Monad.Reader         (MonadReader)
 import           Control.Lens.Combinators     (FoldableWithIndex, ifoldlM)
 import           System.FilePath.Posix        (takeFileName, (-<.>))
@@ -112,13 +112,13 @@ loadLibrary libPath = do
 
 {-|
 This function runs the converter function on the row and header input data, 
-then runs the validator, to check that the JSON 'Value' that was produced validates
-agains the JSON schema.
+then runs the validator(to check that the JSON 'Value' that was produced validates
+agains the JSON schema).
 
 If the output is valid, the data is either stored in a database or a JSON text file.
 When inserting into database, the output is stored in two different tables:
 
-  - The 'insertJSONBOverrideOnConflict' function stores the data as Postgres JSONB in the 
+  - The 'insertJSONBOverwriteOnConflict' function stores the data as Postgres JSONB in the 
     @eavs_jsonb_attributes_values@ table
   - 'flattenToEAV' is used to generate flattened EAV triples form the given JOSn object, which are
     then stored in the @eavs@ table via 'insertEAV'
@@ -145,7 +145,7 @@ convertRow i row header rowFun validator outputHandle onError logFile = do {
   liftIO $ case outputHandle of 
     Left (con, srcID, fileID) -> do
       -- insert record into the JSONB table
-      insertJSONBOverrideOnConflict srcID fileID subjectID res con
+      insertJSONBOverwriteOnConflict srcID fileID subjectID res con
       -- flatten record into EAV and insert into the EAV table
       (_,eav) <- flattenToEAV res
       forM_ eav $ \(uuid,attr,val) -> insertEAV uuid srcID fileID subjectID attr val con
@@ -280,41 +280,57 @@ processFile :: (MonadMask m, MonadIO m, MonadReader JSContextPtr m) =>
   -> ErrorOpts -- ^ Describes the error behaviour when parsing a row of the input
   -> Int -- ^ Number of rows to skip/row number to start from (only used when 'FileType' is 'TXT')
   -> m ()
-processFile dbConnInfo source_id rowFun validator fName sheetName fType onError startFromLine = do
-  logFile <- liftIO $ case onError of
-    LogToFile -> writeFile (fName -<.> "log") "" >> openFile (fName -<.> "log") AppendMode >>= return . Just
-    _ -> return Nothing
+processFile dbConnInfo source_id rowFun validator fName sheetName fType onError startFromLine = 
+  bracket
+    -- open log file if LogToFile was passed to onError
+    (liftIO $ case onError of
+      LogToFile -> writeFile (fName -<.> "log") "" >> openFile (fName -<.> "log") AppendMode >>= return . Just
+      _ -> return Nothing)
+    -- close the log file after we processed the file
+    (liftIO . mapM_ hClose) $
+    -- main processing function
+    \logFile ->
+      -- if we have db conn info, we will be writing into the db instead of a file
+      case (dbConnInfo, source_id) of
+        (Just c, Just srcID) ->
+          bracket
+            -- open a connection to the db
+            (liftIO $ connect c) 
+            -- this action runs after completing the main body function
+            (\con -> liftIO $ commit con >> disconnect con) $ 
+            -- main body function
+            \con -> do 
+              fileID <- do
+                file_id <- liftIO $ getFileID srcID (takeFileName fName) con
+                case file_id of
+                  Just fileID -> do
+                    -- clear any errors from a possible previous run, if we are logging to db
+                    case onError of
+                      LogToDb -> liftIO $ clearErrors srcID fileID con
+                      _ -> pure ()
+                    return fileID
+                  Nothing -> throwM $ FileIDNotFound fName
 
-  -- if we have db conn info, we will be writing into the db instead of a file
-  case (dbConnInfo, source_id) of
-    (Just c, Just srcID) -> do
-      con <- liftIO $ connect c
-      file_id <- liftIO $ getFileID srcID (takeFileName fName) con
-      
-      _ <- case file_id of
-        Just fileID -> do
-          -- clear any errors from a possible previous run, if we are logging to db
-          case onError of
-            LogToDb -> liftIO $ clearErrors srcID fileID con
-            _ -> pure ()
+              jsonAttrVals <- process (Left (con, srcID, fileID)) logFile
+              _ <- liftIO $ do
+                forM_ (HM.toList jsonAttrVals) $ \(attr,vs) ->
+                  insertJSONBAttributesValuesMergeOnConflict srcID attr (toJSON vs) con
+
+                cleanupJSONBAttributesValues con
+              
+              pure ()
+
+        _ -> 
+          bracket
+            -- open an output file and write an opening bracket '['
+            (liftIO $ writeFile (fName -<.> "out.json") "[\n" >> openFile (fName -<.> "out.json") AppendMode)
+            -- after the main body, write closing bracket ']' and close the file
+            (\outputFile -> liftIO $ BS.hPutStr outputFile "\n]" >> hClose outputFile) $
+            -- main body
+            \outputFile -> 
+              process (Right outputFile) logFile >> pure ()
           
-          jsonAttrVals <- process (Left (con, srcID, fileID)) logFile
-          liftIO $ forM_ (HM.toList jsonAttrVals) $ \(attr,vs) ->
-            insertJSONBAttributesValuesMergeOnConflict srcID attr (toJSON vs) con
-          liftIO $ cleanupJSONBAttributesValues con
-        Nothing -> throwM $ FileIDNotFound  fName
-      liftIO $ do
-        commit con
-        disconnect con
 
-    _ -> do
-      outputFile <- liftIO $ writeFile (fName -<.> "out.json") "[\n" >> openFile (fName -<.> "out.json") AppendMode
-      _ <- process (Right outputFile) logFile
-      liftIO $ do
-        BS.hPutStr outputFile "\n]"
-        hClose outputFile 
-
-  liftIO $ mapM_ hClose logFile
   where 
     process outputHandle logFile = case fType of
       TXT  -> processTxtFile  rowFun validator fName logFile onError startFromLine outputHandle

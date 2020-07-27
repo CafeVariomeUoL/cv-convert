@@ -1,5 +1,12 @@
 {-# LANGUAGE KindSignatures, DataKinds, StandaloneDeriving, GADTs #-}
+{-|
+Module      : JSON.Utils
+Description : Utilities for working with JSON records
+Copyright   : (c) Samuel Balco, 2020
+License     : MIT
+Maintainer  : sam@definitelynotspam.email
 
+-}
 module JSON.Utils where
 
 import           Data.Aeson            (Value(..), encode)

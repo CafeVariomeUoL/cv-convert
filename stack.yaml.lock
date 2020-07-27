@@ -75,12 +75,12 @@ packages:
   original:
     hackage: postgresql-placeholder-converter-0.1.0.0@sha256:cc5ae9483bd8c965fd7db8a3e8e406d75b446318abecfdce5f2330bf220b8a56,2340
 - completed:
-    hackage: postgresql-pure-0.2.1.0@sha256:4a30e587bbc00982d7db286c555f28c3dd190e722da21fe4d6347178b6899739,12489
+    hackage: postgresql-pure-0.2.2.0@sha256:76e08777221e9eea2e37bcf202c382c9a9bda833bdd6ddfc19d4823d76aee8a0,12489
     pantry-tree:
-      size: 3772
-      sha256: a30eaf7bdc62b5070875c20d81bd82862421faf4a0fe9b9ff7504775b051984b
+      size: 3773
+      sha256: 17225290a034ca5fc7279a30da52580355918069a58533173c8d7109da85e27a
   original:
-    hackage: postgresql-pure-0.2.1.0
+    hackage: postgresql-pure-0.2.2.0
 snapshots:
 - completed:
     size: 496111

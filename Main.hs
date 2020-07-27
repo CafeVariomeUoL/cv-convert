@@ -17,7 +17,6 @@ import           Data.Default.Class           (def)
 
 import           Runtime
 import           Runtime.Error
-import           Schema
 import           Quickjs
 
 

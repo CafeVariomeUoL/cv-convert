@@ -2,36 +2,36 @@
 
 {-|
 Module      : Quickjs
-Description : QuickJS Haskell bindings
+Description : Haskell bindings to the [QuickJS](https://bellard.org/quickjs/) library
 Copyright   : (c) Samuel Balco, 2020
 License     : MIT
 Maintainer  : sam@definitelynotspam.email
 
-This is a very basic wrapper for the [QuickJS library](https://bellard.org/quickjs/).
+This is a very basic wrapper for the [QuickJS](https://bellard.org/quickjs/) .
 
 The current functionality includes evaluating JS code, calling a JS function in the global scope
 and marshalling 'Value's to and from 'JSValue's.
 -}
 module Quickjs (JSValue, JSContextPtr, quickjs, call, eval, eval_, withJSValue, fromJSValue_) where
 
-import Foreign
-import Foreign.C
+import           Foreign
+import           Foreign.C
 import qualified Language.C.Inline as C
-import Control.Monad.Catch         (MonadThrow(..), MonadCatch(..), MonadMask(..), finally)
-import Control.Monad               (when, forM_)
-import Control.Monad.Reader        (MonadReader, runReaderT, ask)
-import Control.Monad.Trans.Reader  (ReaderT)
-import Control.Monad.IO.Class      (MonadIO, liftIO)
-import Data.Aeson                  (Value(..))
-import qualified Data.Aeson        as Aeson
-import Data.Scientific             (fromFloatDigits, toRealFloat, toBoundedInteger, isInteger)
-import Data.Text                   (Text, pack, unpack)
-import Data.Vector                 (fromList, imapM_)
-import Data.HashMap.Strict         (HashMap, empty, insert, toList)
-import Data.String.Conv            (toS)
+import           Control.Monad.Catch         (MonadThrow(..), MonadCatch(..), MonadMask(..), finally)
+import           Control.Monad               (when, forM_)
+import           Control.Monad.Reader        (MonadReader, runReaderT, ask)
+import           Control.Monad.Trans.Reader  (ReaderT)
+import           Control.Monad.IO.Class      (MonadIO, liftIO)
+import           Data.Aeson                  (Value(..))
+import qualified Data.Aeson                  as Aeson
+import           Data.Scientific             (fromFloatDigits, toRealFloat, toBoundedInteger, isInteger)
+import           Data.Text                   (Text, pack, unpack)
+import           Data.Vector                 (fromList, imapM_)
+import           Data.HashMap.Strict         (HashMap, empty, insert, toList)
+import           Data.String.Conv            (toS)
 
-import Quickjs.Types
-import Quickjs.Error
+import           Quickjs.Types
+import           Quickjs.Error
 
 
 C.context quickjsCtx

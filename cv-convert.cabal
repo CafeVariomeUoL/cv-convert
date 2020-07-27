@@ -8,7 +8,7 @@ description: This tool is intended to be used inside CafeVariome to convert
   The tool takes a data file along with a @.settings@ file associated with said file.
   The @.settings@ file describes how data should be imported and validated. 
   .
-  The tool parses JSON,TXT,CSV and XLSX files and turns each row of data into a JSON object.
+  The tool parses JSON, TXT, CSV and XLSX files and turns each row of data into a JSON object.
   The tool then uses a JavaScript function, defined in the @.settings@ file, to
   process the data row by row. This function returns a JS object, which is then
   converted into JSON and validated against a JSON schema, also provided in the @.settings@ file.
@@ -88,9 +88,9 @@ library
   hs-source-dirs:
     src
   exposed-modules:
-    Runtime, Runtime.Error, Schema, Quickjs, Quickjs.Types, Quickjs.Error, JSON.Utils, DB
+    Runtime, Runtime.Error, Quickjs, Quickjs.Types, Quickjs.Error, JSON.Utils, DB
   other-modules:
-    Parse.Xlsx, Parse.Csv, Parse.Utils
+    Parse.Xlsx, Parse.Csv, Parse.Utils, Schema
   default-language:
     Haskell2010
   default-extensions:

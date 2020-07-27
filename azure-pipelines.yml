@@ -22,10 +22,7 @@ variables:
 steps:
 - task: Cache@2
   inputs:
-    key: 'stack | "$(Agent.OS)" | $(Build.SourcesDirectory)/stack.yaml.lock'
-    restoreKeys: | 
-      stack | "$(Agent.OS)"
-      stack
+    key: '"stack-v1" | "$(Agent.OS)" | $(Build.SourcesDirectory)/stack.yaml.lock'
     path: .azure-cache
   displayName: Download Cache
 - bash: |

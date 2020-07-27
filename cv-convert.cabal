@@ -145,5 +145,6 @@ test-suite cv-convert-test
     , vector
     , uuid
     , string-conv
+    , string-interpolate
     , hashable
   default-language: Haskell2010

@@ -16,7 +16,7 @@ import           Quickjs
 
 eval_1_plus_2 :: Assertion
 eval_1_plus_2 = quickjs $ do
-  v <- eval "1+2;"
+  v <- eval "1 + 2;"
   liftIO $ v @?= Number 3
 
 genText = do 
@@ -58,7 +58,7 @@ tests =
   -- adjustOption (\_ -> QuickCheckTests 10) $
   -- adjustOption (\_ -> QuickCheckVerbose True) $  
   testGroup "Quickjs"
-    [ testCase "empty quickjs" (quickjs $ pure ())
-    , testCase "eval 1 + 2 = 3" eval_1_plus_2
+    [ testCase "empty quickjs call" (quickjs $ pure ())
+    , testCase "eval '1 + 2;'" eval_1_plus_2
     , testProperty "marshalling Value to JSValue and back" marshall_to_from_JSValue
     ]

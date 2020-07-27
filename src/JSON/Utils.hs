@@ -1,3 +1,5 @@
+{-# LANGUAGE KindSignatures, DataKinds, StandaloneDeriving, GADTs #-}
+
 module JSON.Utils where
 
 import           Data.Aeson            (Value(..), encode)
@@ -16,6 +18,7 @@ import           Data.Foldable         (foldlM)
 import           Runtime.Error         (SubjectIDNotFound(..))
 import           Quickjs.Error         (InternalError(..))
 import           DB                    (SubjectID(..))
+
 
 getSubjectID :: MonadThrow m => Value -> m SubjectID
 getSubjectID (Object m) = case HM.lookup "subject_id" m of
@@ -144,3 +147,6 @@ flattenToEAV (Object o) = do
     f uuid attr (String val) = pure (uuid, [(uuid, attr, val)])
     f uuid attr val = pure (uuid, [(uuid, attr, toS $ encode val)])
 flattenToEAV _ = undefined
+
+
+

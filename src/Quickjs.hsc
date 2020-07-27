@@ -12,7 +12,7 @@ This is a very basic wrapper for the [QuickJS library](https://bellard.org/quick
 The current functionality includes evaluating JS code, calling a JS function in the global scope
 and marshalling 'Value's to and from 'JSValue's.
 -}
-module Quickjs (JSValue, JSContextPtr, quickjs, call, eval, eval_, withJSValue) where
+module Quickjs (JSValue, JSContextPtr, quickjs, call, eval, eval_, withJSValue, fromJSValue_) where
 
 import Foreign
 import Foreign.C
@@ -452,10 +452,10 @@ eval_ = evalAs_ Global
 --   return val
 
 
--- fromJSValue_ :: (MonadCatch m, MonadReader JSContextPtr m, MonadIO m) => JSValue -> m Value
--- fromJSValue_ val = do
---   ctx <- ask
---   jsToJSON ctx val
+fromJSValue_ :: (MonadCatch m, MonadReader JSContextPtr m, MonadIO m) => JSValue -> m Value
+fromJSValue_ val = do
+  ctx <- ask
+  jsToJSON ctx val
 
 
 
@@ -560,15 +560,10 @@ quickjs f = do
     js_std_add_helpers($(JSContext *ctx), -1, NULL);
   } |]
 
-  res <- (runReaderT f ctx) --`catchError` (\e -> do { cleanup ctx rt ; throwError e })
+  res <- runReaderT f ctx
   cleanup ctx rt
   return res
   where
     cleanup ctx rt = liftIO $ do
       jsFreeContext ctx
       jsFreeRuntime rt
-
--- -- quickjsIO :: IO a -> IO a
--- quickjsIO f = quickjs f `catch` \(err::JSRuntimeException) -> do
---   putStrLn "Quickjs error:"
---   putStrLn $ show err

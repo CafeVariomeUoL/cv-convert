@@ -2,8 +2,8 @@ name:                cv-convert
 version:             0.1
 build-type:          Simple
 cabal-version:       >= 1.25
-description: This tool is intended to be used inside CafeVariome to help convert 
-  and validate different data sets that users wish to import.
+description: This tool is intended to be used inside CafeVariome to convert 
+  and validate various data sets that users wish to import.
   .
   The tool takes a data file along with a @.settings@ file associated with said file.
   The @.settings@ file describes how data should be imported and validated. 
@@ -83,7 +83,8 @@ library
     pcre-heavy,
     filepath,
     directory,
-    hjsonpointer
+    hjsonpointer,
+    hashable
   hs-source-dirs:
     src
   exposed-modules:
@@ -116,4 +117,33 @@ library
     -O2 -fno-warn-orphans
   if os(linux)
     ghc-options: -static
-    ld-options: -static -pthread 
+    ld-options: -static -pthread
+
+test-suite cv-convert-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Quickjs.Tests Runtime.Tests JSON.Utils.Tests
+  default-extensions:
+    ScopedTypeVariables, OverloadedStrings, DerivingStrategies, GeneralizedNewtypeDeriving, DeriveGeneric, DeriveAnyClass
+  hs-source-dirs:
+      test
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base
+    , cv-convert
+    , tasty
+    , tasty-hunit
+    , tasty-quickcheck
+    , HUnit
+    , QuickCheck
+    , aeson
+    , exceptions
+    , text
+    , unordered-containers
+    , containers
+    , vector
+    , uuid
+    , string-conv
+    , hashable
+  default-language: Haskell2010

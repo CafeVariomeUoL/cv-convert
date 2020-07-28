@@ -1,6 +1,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 
 module Runtime.Tests(tests) where
+import           GHC.IO.Encoding         (setLocaleEncoding, utf8)
 import           Test.Tasty              (TestTree, testGroup)
 import           Test.Tasty.HUnit        (testCase)
 -- import           Test.Tasty.QuickCheck   (testProperty, QuickCheckTests(..), QuickCheckVerbose(..))
@@ -27,6 +28,7 @@ export default Utils;|]
 
 load_lib :: Assertion
 load_lib = do
+    setLocaleEncoding utf8
     writeFile "./test-lib.js" lib_js
     quickjs $ do
       loadLibrary "./test-lib.js"

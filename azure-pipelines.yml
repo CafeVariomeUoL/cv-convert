@@ -31,7 +31,7 @@ steps:
     tar -vxzf .azure-cache/stack-root.tar.gz -C /
     mkdir -p .stack-work
     tar -vxzf .azure-cache/stack-work.tar.gz
-  displayName: "Unpack cache"
+  displayName: "Unpack Cache"
   condition: eq(variables.CACHE_RESTORED, 'true')
 - script: |
     mkdir -p ~/.local/bin
@@ -50,4 +50,4 @@ steps:
     mkdir -p .azure-cache
     tar -vczf .azure-cache/stack-root.tar.gz $STACK_ROOT
     tar -vczf .azure-cache/stack-work.tar.gz .stack-work
-  displayName: "Pack cache"
+  displayName: "Pack Cache"

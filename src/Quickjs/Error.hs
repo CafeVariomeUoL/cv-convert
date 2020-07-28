@@ -65,10 +65,10 @@ instance Exception UnsupportedTypeTag where
   fromException = jsRuntimeExceptionFromException
 
 
-data JSException = JSException {message :: String} deriving (Generic, Typeable)
+data JSException = JSException {location :: String, message :: String} deriving (Generic, Typeable)
 
 instance Show JSException where
-    show (JSException err) = "JS runtime threw an exception:\n" ++ err
+    show (JSException loc err) = "JS runtime threw an exception in " ++ loc ++ ":\n" ++ err
 
 instance ToJSON JSException where
   toJSON = genericExceptionToJSON

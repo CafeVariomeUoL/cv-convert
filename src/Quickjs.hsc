@@ -137,13 +137,13 @@ jsNewString ctxPtr s = C.withPtr_ $ \ptr -> withCStringLen s $ \(cstringPtr, cst
 
 
 
-checkIsExpcetion :: (MonadThrow m, MonadIO m) => JSContextPtr -> JSValue -> m ()
-checkIsExpcetion ctxPtr val = do
+checkIsException :: (MonadThrow m, MonadIO m) => String -> JSContextPtr -> JSValue -> m ()
+checkIsException loc ctxPtr val = do
   isExn <- jsIsException val
   when isExn $ do
     err <- getErrorMessage ctxPtr 
     liftIO $ jsFreeValue ctxPtr val
-    throwM $ JSException err
+    throwM $ JSException loc err
 
 
 
@@ -159,11 +159,11 @@ jsonToJSValue ctx (String s) = liftIO $ jsNewString ctx (unpack s)
 jsonToJSValue ctxPtr (Array xs) = do
   arrVal <- liftIO (C.withPtr_ $ \arrValPtr -> [C.block| void { *$(JSValueConst *arrValPtr) = JS_NewArray($(JSContext *ctxPtr)); } |])
   
-  checkIsExpcetion ctxPtr arrVal
+  checkIsException "jsonToJSValue/Array/1" ctxPtr arrVal
 
   flip imapM_ xs $ \index value -> do 
     val <- jsonToJSValue ctxPtr value
-    checkIsExpcetion ctxPtr val
+    checkIsException "jsonToJSValue/Array/2" ctxPtr val
 
     let idx = fromIntegral index
     code <- liftIO (with arrVal $ \arrValPtr -> with val $ \valPtr -> 
@@ -186,11 +186,11 @@ jsonToJSValue ctxPtr (Object o) = do
   objVal <- liftIO (C.withPtr_ $ \objValPtr -> 
     [C.block| void { *$(JSValueConst *objValPtr) = JS_NewObject($(JSContext *ctxPtr)); } |])
 
-  checkIsExpcetion ctxPtr objVal
+  checkIsException "jsonToJSValue/Object/1" ctxPtr objVal
   
   forM_ (toList o) $ \(key,value) -> do
     val <- jsonToJSValue ctxPtr value
-    checkIsExpcetion ctxPtr val
+    checkIsException "jsonToJSValue/Object/2" ctxPtr val
 
     code <- liftIO (with objVal $ \objValPtr -> with val $ \valPtr -> 
       withCString (toS key) $ \cstringPtr -> do
@@ -215,7 +215,7 @@ jsToBool :: (MonadThrow m, MonadIO m) => JSContextPtr -> JSValue -> m Bool
 jsToBool ctxPtr val = do
     code <- liftIO $ with val $ \valPtr -> [C.block| int { return JS_ToBool($(JSContext *ctxPtr), *$(JSValueConst *valPtr)); } |]
     case code of
-        -1 -> getErrorMessage ctxPtr >>= throwM . JSException
+        -1 -> getErrorMessage ctxPtr >>= throwM . JSException "jsToBool"
         0 -> return False
         _ -> return True
 
@@ -223,14 +223,14 @@ jsToInt64 :: (MonadThrow m, MonadIO m) => JSContextPtr -> JSValue -> m Int64
 jsToInt64 ctxPtr val = do
   (res, code) <- liftIO $ C.withPtr $ \intPtr -> with val $ \valPtr -> [C.block| int { return JS_ToInt64($(JSContext *ctxPtr), $(int64_t *intPtr), *$(JSValueConst *valPtr)); } |]
   if code == 0 then return res
-  else getErrorMessage ctxPtr >>= throwM . JSException
+  else getErrorMessage ctxPtr >>= throwM . JSException "jsToInt64"
 
 
 jsToFloat64 :: (MonadThrow m, MonadIO m) => JSContextPtr -> JSValue -> m CDouble
 jsToFloat64 ctxPtr val = do
   (res, code) <- liftIO $ C.withPtr $ \doublePtr -> with val $ \valPtr -> [C.block| int { return JS_ToFloat64($(JSContext *ctxPtr), $(double *doublePtr), *$(JSValueConst *valPtr)); } |]
   if code == 0 then return res
-  else getErrorMessage ctxPtr >>= throwM . JSException
+  else getErrorMessage ctxPtr >>= throwM . JSException "jsToFloat64"
 
 
 
@@ -255,7 +255,7 @@ jsToJSON ctx jsval = do
     JSTypeFromTag JSTagException -> do
       err <- getErrorMessage ctx 
       liftIO $ jsFreeValue ctx jsval
-      throwM $ JSException err
+      throwM $ JSException "jsToJSON/JSTagException" err
     JSTypeFromTag JSTagNull -> return Null
     JSTypeFromTag JSTagUndefined -> return Null
     JSTypeFromTag JSTagBool -> do
@@ -290,7 +290,7 @@ jsArrayToJSON ctxPtr jsval index len =
       val <- liftIO $ C.withPtr_ $ \ptr -> with jsval $ \jsvalPtr -> 
         [C.block| void { *$(JSValue *ptr) = JS_GetPropertyUint32($(JSContext *ctxPtr), *$(JSValueConst *jsvalPtr), $(uint32_t idx)); } |]
 
-      checkIsExpcetion ctxPtr val
+      checkIsException "jsArrayToJSON" ctxPtr val
       res <- jsToJSON ctxPtr val
       liftIO $ jsFreeValue ctxPtr val
       return res
@@ -336,7 +336,7 @@ jsObjectToJSON ctxPtr obj = do
 
         key <- do
           key' <- liftIO $ C.withPtr_ $ \ptr -> [C.block| void { *$(JSValue *ptr) = JS_AtomToString($(JSContext *ctxPtr), (*$(JSPropertyEnum **properties))[$(uint32_t i)].atom); } |]
-          checkIsExpcetion ctxPtr key'
+          checkIsException "jsObjectToJSON/collectVals/1" ctxPtr key'
           res <- jsToJSON ctxPtr key'
           liftIO $ jsFreeValue ctxPtr key'
           return res
@@ -346,7 +346,7 @@ jsObjectToJSON ctxPtr obj = do
             val <-  do
               val' <- liftIO $ C.withPtr_ $ \ptr ->
                 [C.block| void { *$(JSValue *ptr) = JS_GetProperty($(JSContext *ctxPtr), *$(JSValueConst *objPtr), (*$(JSPropertyEnum **properties))[$(uint32_t i)].atom); } |]
-              checkIsExpcetion ctxPtr val'
+              checkIsException "jsObjectToJSON/collectVals/2" ctxPtr val'
               res <- jsToJSON ctxPtr val'
               liftIO $ jsFreeValue ctxPtr val'
               return res
@@ -416,7 +416,7 @@ evalAs :: (MonadMask m, MonadReader JSContextPtr m, MonadIO m) => JSEvalType -> 
 evalAs eTyp code = do
   ctx <- ask
   val <- liftIO $ evalRaw ctx eTyp code
-  checkIsExpcetion ctx val
+  checkIsException "evalAs" ctx val
   jsToJSON ctx val `finally` freeJSValue val
 
 
@@ -431,7 +431,7 @@ evalAs_ :: (MonadThrow m, MonadReader JSContextPtr m, MonadIO m) => JSEvalType -
 evalAs_ eTyp code = do
   ctx <- ask
   val <- liftIO $ evalRaw ctx eTyp code
-  checkIsExpcetion ctx val
+  checkIsException "evalAs_" ctx val
   freeJSValue val
 
 
@@ -448,7 +448,7 @@ eval_ = evalAs_ Global
 -- toJSValue v = do
 --   ctx <- ask
 --   val <- jsonToJSValue ctx (Aeson.toJSON v)
---   checkIsExpcetion ctx val `catch` (\(e:: JSRuntimeException) -> do {freeJSValue val ; throwM e})
+--   checkIsException ctx val `catch` (\(e:: JSRuntimeException) -> do {freeJSValue val ; throwM e})
 --   return val
 
 
@@ -477,7 +477,7 @@ withJSValue :: (MonadMask m, MonadReader JSContextPtr m, MonadIO m, Aeson.ToJSON
 withJSValue v f = do
   ctx <- ask
   val <- jsonToJSValue ctx (Aeson.toJSON v)
-  do { checkIsExpcetion ctx val ; f val } `finally` freeJSValue val
+  do { checkIsException "withJSValue" ctx val ; f val } `finally` freeJSValue val
 
 
 
@@ -497,7 +497,7 @@ callRaw ctxPtr funName args = do
       JSTypeFromTag JSTagException -> do
         err <- getErrorMessage ctxPtr 
         liftIO $ jsFreeValue ctxPtr fun
-        throwM $ JSException err
+        throwM $ JSException "callRaw" err
       JSTypeFromTag JSTagUndefined -> throwM $ JSValueUndefined funName
       JSTypeFromTag JSTagObject -> do
         res <- liftIO $ withArrayLen args $ \len argv -> jsCall ctxPtr fun (fromIntegral $ len) argv
@@ -510,7 +510,7 @@ callRaw ctxPtr funName args = do
 -- call funName args = do
 --   ctx <- ask
 --   val <- callRaw ctx funName args
---   checkIsExpcetion ctx val
+--   checkIsException ctx val
 --   return val
 
 
@@ -519,7 +519,7 @@ call :: (MonadMask m, MonadReader JSContextPtr m, MonadIO m) => String -> [JSVal
 call funName args = do
   ctx <- ask
   val <- callRaw ctx funName args
-  do { checkIsExpcetion ctx val; jsToJSON ctx val } `finally` freeJSValue val
+  do { checkIsException "call" ctx val; jsToJSON ctx val } `finally` freeJSValue val
 
 
 freeJSValue :: (MonadThrow m, MonadReader JSContextPtr m, MonadIO m) => JSValue -> m ()

@@ -1,20 +1,12 @@
 import * as bjson from "./bjson.so";
 
-function assert(actual, expected, message) {
-    if (arguments.length == 1)
-        expected = true;
-
-    if (actual === expected)
+function assert(b, str)
+{
+    if (b) {
         return;
-
-    if (actual !== null && expected !== null
-    &&  typeof actual == 'object' && typeof expected == 'object'
-    &&  actual.toString() === expected.toString())
-        return;
-
-    throw Error("assertion failed: got |" + actual + "|" +
-                ", expected |" + expected + "|" +
-                (message ? " (" + message + ")" : ""));
+    } else {
+        throw Error("assertion failed: " + str);
+    }
 }
 
 function toHex(a)
@@ -32,20 +24,6 @@ function toHex(a)
     return s;
 }
 
-function isArrayLike(a)
-{
-    return Array.isArray(a) || 
-        (a instanceof Uint8ClampedArray) ||
-        (a instanceof Uint8Array) ||
-        (a instanceof Uint16Array) ||
-        (a instanceof Uint32Array) ||
-        (a instanceof Int8Array) ||
-        (a instanceof Int16Array) ||
-        (a instanceof Int32Array) ||
-        (a instanceof Float32Array) ||
-        (a instanceof Float64Array);
-}
-
 function toStr(a)
 {
     var s, i, props, prop;
@@ -54,15 +32,7 @@ function toStr(a)
     case "object":
         if (a === null)
             return "null";
-        if (a instanceof Date) {
-            s = "Date(" + toStr(a.valueOf()) + ")";
-        } else if (a instanceof Number) {
-            s = "Number(" + toStr(a.valueOf()) + ")";
-        } else if (a instanceof String) {
-            s = "String(" + toStr(a.valueOf()) + ")";
-        } else if (a instanceof Boolean) {
-            s = "Boolean(" + toStr(a.valueOf()) + ")";
-        } else if (isArrayLike(a)) {
+        if (Array.isArray(a)) {
             s = "[";
             for(i = 0; i < a.length; i++) {
                 if (i != 0)
@@ -115,35 +85,6 @@ function bjson_test(a)
     }
 }
 
-/* test multiple references to an object including circular
-   references */
-function bjson_test_reference()
-{
-    var array, buf, i, n, array_buffer;
-    n = 16;
-    array = [];
-    for(i = 0; i < n; i++)
-        array[i] = {};
-    array_buffer = new ArrayBuffer(n);
-    for(i = 0; i < n; i++) {
-        array[i].next = array[(i + 1) % n];
-        array[i].idx = i;
-        array[i].typed_array = new Uint8Array(array_buffer, i, 1);
-    }
-    buf = bjson.write(array, true);
-
-    array = bjson.read(buf, 0, buf.byteLength, true);
-
-    /* check the result */
-    for(i = 0; i < n; i++) {
-        assert(array[i].next, array[(i + 1) % n]);
-        assert(array[i].idx, i);
-        assert(array[i].typed_array.buffer, array_buffer);
-        assert(array[i].typed_array.length, 1);
-        assert(array[i].typed_array.byteOffset, i);
-    }
-}
-
 function bjson_test_all()
 {
     var obj;
@@ -170,11 +111,6 @@ function bjson_test_all()
                     BigDecimal("1.233e-1000")]);
     }
 
-    bjson_test([new Date(1234), new String("abc"), new Number(-12.1), new Boolean(true)]);
-
-    bjson_test(new Int32Array([123123, 222111, -32222]));
-    bjson_test(new Float64Array([123123, 222111.5]));
-    
     /* tested with a circular reference */
     obj = {};
     obj.x = obj;
@@ -184,8 +120,6 @@ function bjson_test_all()
     } catch(e) {
         assert(e instanceof TypeError);
     }
-
-    bjson_test_reference();
 }
 
 bjson_test_all();

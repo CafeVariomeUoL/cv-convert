@@ -13,6 +13,7 @@ import           LoadEnv                      (loadEnvFromAbsolute)
 import           System.Environment           (lookupEnv)
 import           Database.HDBC.PostgreSQL.Pure(Config(..), Address(..))
 import           Data.Default.Class           (def)
+import           Data.String.Conv             (toS)
 
 
 import           Runtime
@@ -80,7 +81,7 @@ main = do
             lib <- liftIO $ lookupEnv "jslib"
             loadLibrary (fromMaybe "./lib.js" lib)
             liftIO $ print ("loaded lib at: " ++ (fromMaybe "./lib.js" lib) :: String)
-            _ <- eval_ $ "rowFun = (row, header) => { " ++ processFunction ++ " }"
+            _ <- eval_ $ "rowFun = (row, header) => { " <> toS processFunction <> " }"
             
             processFile 
               dbConnInfo 

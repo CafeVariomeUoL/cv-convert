@@ -1,7 +1,6 @@
 {-# LANGUAGE QuasiQuotes #-}
 
 module Runtime.Tests(tests) where
-import           GHC.IO.Encoding         (setLocaleEncoding, utf8)
 import           Test.Tasty              (TestTree, testGroup)
 import           Test.Tasty.HUnit        (testCase)
 -- import           Test.Tasty.QuickCheck   (testProperty, QuickCheckTests(..), QuickCheckVerbose(..))
@@ -15,25 +14,26 @@ import           Control.Monad.IO.Class  (liftIO)
 -- import qualified Data.HashMap.Strict            as HS
 -- import qualified Data.Vector             as V
 import           Data.String.Interpolate      (i)
+import           Main.Utf8                    (withUtf8)
+
 import           Runtime
 import           Quickjs
 
 
 
 lib_js = [i|let Utils = {
-  helloWorld: function() {return 1;}
+  helloWorld: function() {return 2;}
 }
 export default Utils;|]
 
 
 load_lib :: Assertion
-load_lib = do
-    setLocaleEncoding utf8
-    writeFile "./test-lib.js" lib_js
+load_lib =do
+    withUtf8 $ writeFile "./test-lib.js" lib_js
     quickjs $ do
       loadLibrary "./test-lib.js"
       v <- eval "Utils.helloWorld();"
-      liftIO $ v @?= Number 1
+      liftIO $ v @?= Number 2
 
 
 

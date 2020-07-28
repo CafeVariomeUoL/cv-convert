@@ -13,11 +13,15 @@ The runtime module exports the main functionality of the cv-convert tool.
 module Runtime(SourceID, FileType(..), readFileType, SheetName, Settings(..), loadLibrary, processFile, compileSchema) where
 
 import           GHC.Generics
-import           Text.Regex.PCRE.Heavy
+-- import           Text.Regex.PCRE.Heavy
+import           Main.Utf8                    (withUtf8)
 import           System.IO                    (openFile, IOMode(..), Handle, hClose)
 import           Data.Aeson                   (Value(..), FromJSON(..), decode, toJSON, genericParseJSON, defaultOptions, constructorTagModifier)
 import           Data.Aeson.Encode.Pretty     (encodePretty)
-import qualified Data.ByteString.Lazy         as BS
+import qualified Data.ByteString.Lazy         as BSL
+import qualified Data.ByteString              as BS
+import qualified Data.ByteString.Search       as BS
+
 import           Data.Text                    (Text)
 import qualified Data.Text                    as Text
 import qualified Data.Text.IO                 as Text
@@ -55,14 +59,14 @@ instance FromJSON FileType where
 Parses a file extension, such as @.txt@ into 'TXT'. 
 Returns 'Nothing' if the extension does not mach any of the 'FileType's.
 -}
-readFileType :: String -> Maybe FileType
+readFileType :: FilePath -> Maybe FileType
 readFileType [] = Nothing
 readFileType s = decode $ toS $ "\"" ++ (map toLower $ tail s) ++ "\""
 
 newtype SheetName = SheetName {unSheetName :: Text} deriving (Generic, FromJSON, Show, Eq)
 
 data Settings = Settings { 
-  processFunction :: String -- ^ A string containg the JS function which will be applied to the input
+  processFunction :: Text -- ^ A string containg the JS function which will be applied to the input
 , jsonSchema :: Maybe Schema -- ^ A JSON schema used for output validation
 , openAs :: Maybe FileType -- ^ This parameter can be used to specify the parsing behaviour 
                            -- for files such as @.phenotype@, which should be parsed as 'JSON'.
@@ -73,7 +77,7 @@ data Settings = Settings {
 , worksheet :: Maybe SheetName -- ^ Used to specify which worksheet should be parsed.
                                -- Only works for 'XLSX' files. If left blank, defaults to first found worksheet.
 } deriving (Show, Eq, Generic)
- 
+
 instance FromJSON Settings
 
 
@@ -96,11 +100,10 @@ loadLibrary :: (MonadThrow m, MonadIO m, MonadReader JSContextPtr m) => FilePath
 loadLibrary libPath = do
   libExists <- liftIO $ doesFileExist libPath
   when libExists $ do
-    f <- liftIO $ readFile libPath
+    f <- liftIO $ withUtf8 $ BS.readFile libPath
     -- rather hacky way to remove the keyword default from the lib module
     -- we have to do this because quickjs won't let us import and use JS modules
-    let f' = gsub [re|export\s+default|] ("" :: String) f
-    _ <- eval_ f'
+    _ <- eval_ $ BSL.toStrict $ BS.replace "export default" ("" :: BS.ByteString) f
     return ()
   return ()
 
@@ -149,8 +152,8 @@ convertRow i row header rowFun validator outputHandle onError logFile = do {
 
       return $ Just $ createAllPathsWithValues res
     Right outputFile -> do
-      when (i > 0) $ BS.hPutStr outputFile " , "
-      BS.hPutStr outputFile $ encodePretty res
+      when (i > 0) $ BSL.hPutStr outputFile " , "
+      BSL.hPutStr outputFile $ encodePretty res
       return Nothing ;
 } `catch` (\(e::RuntimeException) -> handleError onError logFile maybeDBConn i e >> return Nothing)
 
@@ -244,7 +247,7 @@ processJsonFile :: (MonadMask m, MonadIO m, MonadReader JSContextPtr m) =>
   -> Either (Connection, SourceID, FileID) Handle
   -> m (HM.HashMap Value (S.HashSet Value))
 processJsonFile rowFun validator fName logFile onError outputHandle = do 
-  f <- liftIO $ BS.readFile fName;
+  f <- liftIO $ BSL.readFile fName;
   let 
     (rows, hs) = case decode f of
       Just (Array js) -> (V.toList js, S.toList $ V.foldl (\acc o -> (S.fromList $ getHeader o) `S.union` acc) S.empty js)
@@ -322,7 +325,7 @@ processFile dbConnInfo source_id rowFun validator fName sheetName fType onError 
             -- open an output file and write an opening bracket '['
             (liftIO $ writeFile (fName -<.> "out.json") "[\n" >> openFile (fName -<.> "out.json") AppendMode)
             -- after the main body, write closing bracket ']' and close the file
-            (\outputFile -> liftIO $ BS.hPutStr outputFile "\n]" >> hClose outputFile) $
+            (\outputFile -> liftIO $ BSL.hPutStr outputFile "\n]" >> hClose outputFile) $
             -- main body
             \outputFile -> 
               process (Right outputFile) logFile >> pure ()

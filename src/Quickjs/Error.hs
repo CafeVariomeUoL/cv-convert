@@ -2,11 +2,13 @@
 
 module Quickjs.Error where
 import           Control.Exception (Exception(..), SomeException)
-import           Data.Typeable     (cast)
-import           Type.Reflection   (Typeable)
+import           Data.Typeable       (cast)
+import           Data.Text           (Text)
+import           Data.String.Conv    (toS)
+import           Type.Reflection     (Typeable)
 import           GHC.Generics
 import           Foreign.C.Types
-import           Data.Aeson        (Value(..), ToJSON(..))
+import           Data.Aeson          (Value(..), ToJSON(..))
 import qualified Data.HashMap.Strict as HM
 
 import           Quickjs.Types
@@ -42,7 +44,7 @@ instance ToJSON CLong where
 data UnknownJSTag = UnknownJSTag {raw_tag :: !CLong} deriving (Generic, Typeable)
 
 instance Show UnknownJSTag where
-  show (UnknownJSTag t) = "Uknown JS tag: " ++ show t
+  show UnknownJSTag{..} = "Uknown JS tag: " ++ show raw_tag
 
 instance ToJSON UnknownJSTag where
   toJSON = genericExceptionToJSON
@@ -55,7 +57,7 @@ instance Exception UnknownJSTag where
 data UnsupportedTypeTag = UnsupportedTypeTag {_tag :: JSTagEnum} deriving (Generic, Typeable)
 
 instance Show UnsupportedTypeTag where
-  show (UnsupportedTypeTag t) = "Unsupported type tag: " ++ show t
+  show UnsupportedTypeTag{..} = "Unsupported type tag: " ++ show _tag
 
 instance ToJSON UnsupportedTypeTag where
   toJSON UnsupportedTypeTag{..} = Object $ HM.fromList [("error_type", String "UnknownJSTag"), ("tag", toJSON _tag)]
@@ -65,10 +67,10 @@ instance Exception UnsupportedTypeTag where
   fromException = jsRuntimeExceptionFromException
 
 
-data JSException = JSException {location :: String, message :: String} deriving (Generic, Typeable)
+data JSException = JSException {location :: Text, message :: Text} deriving (Generic, Typeable)
 
 instance Show JSException where
-    show (JSException loc err) = "JS runtime threw an exception in " ++ loc ++ ":\n" ++ err
+    show JSException{..} = "JS runtime threw an exception in " ++ toS location ++ ":\n=================\n" ++ toS message ++ "\n=================\n"
 
 instance ToJSON JSException where
   toJSON = genericExceptionToJSON
@@ -78,10 +80,10 @@ instance Exception JSException where
   fromException = jsRuntimeExceptionFromException
 
 
-data JSValueUndefined = JSValueUndefined {value :: String} deriving (Generic, Typeable)
+data JSValueUndefined = JSValueUndefined {value :: Text} deriving (Generic, Typeable)
 
 instance Show JSValueUndefined where
-  show (JSValueUndefined v) =  "The JS value '" ++ v ++ "' is undefined."
+  show JSValueUndefined{..} =  "The JS value '" ++ toS value ++ "' is undefined."
 
 instance ToJSON JSValueUndefined where
   toJSON = genericExceptionToJSON
@@ -93,13 +95,13 @@ instance Exception JSValueUndefined where
 
 data JSValueIncorrectType = 
   JSValueIncorrectType {
-    name :: String
+    name :: Text
   , expected :: JSTypeEnum
   , found :: JSTypeEnum
   } deriving (Generic, Typeable)
 
 instance Show JSValueIncorrectType where
-  show JSValueIncorrectType{..} = "Type mismatch of the JS value '" ++ name ++ "'. Expected: " ++ show expected ++ ", found: " ++ show found
+  show JSValueIncorrectType{..} = "Type mismatch of the JS value '" ++ toS name ++ "'. Expected: " ++ show expected ++ ", found: " ++ show found
 
 instance ToJSON JSValueIncorrectType where
   toJSON = genericExceptionToJSON
@@ -109,10 +111,10 @@ instance Exception JSValueIncorrectType where
   fromException = jsRuntimeExceptionFromException
 
 
-data InternalError = InternalError { message :: String } deriving (Generic, Typeable)
+data InternalError = InternalError { message :: Text } deriving (Generic, Typeable)
 
 instance Show InternalError where
-  show (InternalError err) = "Internal error occured:\n" ++ err
+  show InternalError{..} = "Internal error occured:\n" ++ toS message
 
 instance ToJSON InternalError where
   toJSON = genericExceptionToJSON

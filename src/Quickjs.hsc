@@ -15,17 +15,19 @@ and marshalling 'Value's to and from 'JSValue's.
 module Quickjs (JSValue, JSContextPtr, quickjs, call, eval, eval_, withJSValue, fromJSValue_) where
 
 import           Foreign
-import           Foreign.C
-import qualified Language.C.Inline as C
+import           Foreign.C                   (CString, CInt, CDouble, CSize)
+import           Data.ByteString             (ByteString, useAsCString, useAsCStringLen, packCString)
+import           Data.Text.Encoding          (encodeUtf8)
+import qualified Language.C.Inline           as C
 import           Control.Monad.Catch         (MonadThrow(..), MonadCatch(..), MonadMask(..), finally)
 import           Control.Monad               (when, forM_)
 import           Control.Monad.Reader        (MonadReader, runReaderT, ask)
 import           Control.Monad.Trans.Reader  (ReaderT)
 import           Control.Monad.IO.Class      (MonadIO, liftIO)
-import           Data.Aeson                  (Value(..))
+import           Data.Aeson                  (Value(..), encode)
 import qualified Data.Aeson                  as Aeson
 import           Data.Scientific             (fromFloatDigits, toRealFloat, toBoundedInteger, isInteger)
-import           Data.Text                   (Text, pack, unpack)
+import           Data.Text                   (Text)
 import           Data.Vector                 (fromList, imapM_)
 import           Data.HashMap.Strict         (HashMap, empty, insert, toList)
 import           Data.String.Conv            (toS)
@@ -75,9 +77,6 @@ jsIs_ val fun = do
   b <- liftIO $ with val fun
   return $ b == 1
 
-jsIsException :: MonadIO m => JSValue -> m Bool
-jsIsException val = jsIs_ val $ \valPtr -> [C.block| int { return JS_IsException(*$(JSValueConst *valPtr)); } |]
-
 jsIsNumber :: MonadIO m => JSValue -> m Bool
 jsIsNumber val = jsIs_ val $ \valPtr -> [C.block| int { return JS_IsNumber(*$(JSValueConst *valPtr)); } |]
 
@@ -116,34 +115,21 @@ jsNewInt64 :: JSContextPtr -> Int64 -> IO JSValue
 jsNewInt64 ctxPtr num = do
   C.withPtr_ $ \ptr -> [C.block| void { *$(JSValue *ptr) = JS_NewInt64($(JSContext *ctxPtr), $(int64_t num)); } |]
 
-jsNewString :: JSContextPtr -> String -> IO JSValue
-jsNewString ctxPtr s = C.withPtr_ $ \ptr -> withCStringLen s $ \(cstringPtr, cstringLen) -> do
+jsNewString :: JSContextPtr -> ByteString -> IO JSValue
+jsNewString ctxPtr s = C.withPtr_ $ \ptr -> useAsCStringLen s $ \(cstringPtr, cstringLen) -> do
   let len = fromIntegral cstringLen
   [C.block| void { *$(JSValue *ptr) = JS_NewStringLen($(JSContext *ctxPtr), $(const char *cstringPtr), $(size_t len)); } |]
 
 
 
--- withJSValue :: (MonadThrow m, MonadIO m) => JSContext -> JSValue -> (Ptr JSValue -> m b) -> m b
--- withJSValue ctx json f = do
---     ptr <- liftIO malloc
---     jsonToJSValue ctx ptr json 
---     r <- f ptr `catchError` (\e -> do { cleanup ptr ; throwError e} )
---     cleanup ptr
---     return r
---   where
---     cleanup ptr = liftIO $ do
---       jsFreeValue ctx ptr
---       free ptr
-
-
-
-checkIsException :: (MonadThrow m, MonadIO m) => String -> JSContextPtr -> JSValue -> m ()
-checkIsException loc ctxPtr val = do
-  isExn <- jsIsException val
-  when isExn $ do
-    err <- getErrorMessage ctxPtr 
-    liftIO $ jsFreeValue ctxPtr val
-    throwM $ JSException loc err
+checkIsException :: (MonadThrow m, MonadIO m) => Text -> JSContextPtr -> JSValue -> m ()
+checkIsException loc ctxPtr val =
+  case fromCType $ tag val of
+    Just JSTagException -> do
+      err <- getErrorMessage ctxPtr 
+      liftIO $ jsFreeValue ctxPtr val
+      throwM $ JSException loc err
+    _ -> pure ()
 
 
 
@@ -155,7 +141,7 @@ jsonToJSValue ctx (Number n) =
   else case toBoundedInteger n of
     Just i -> liftIO $ jsNewInt64 ctx i
     Nothing -> throwM $ InternalError "Value does not fit in Int64"
-jsonToJSValue ctx (String s) = liftIO $ jsNewString ctx (unpack s) 
+jsonToJSValue ctx (String s) = liftIO $ jsNewString ctx $ toS s
 jsonToJSValue ctxPtr (Array xs) = do
   arrVal <- liftIO (C.withPtr_ $ \arrValPtr -> [C.block| void { *$(JSValueConst *arrValPtr) = JS_NewArray($(JSContext *ctxPtr)); } |])
   
@@ -193,7 +179,7 @@ jsonToJSValue ctxPtr (Object o) = do
     checkIsException "jsonToJSValue/Object/2" ctxPtr val
 
     code <- liftIO (with objVal $ \objValPtr -> with val $ \valPtr -> 
-      withCString (toS key) $ \cstringPtr -> do
+      useAsCString (encodeUtf8 key) $ \cstringPtr -> do
         [C.block| int { 
           return JS_DefinePropertyValueStr(
             $(JSContext *ctxPtr), 
@@ -234,12 +220,12 @@ jsToFloat64 ctxPtr val = do
 
 
 
-jsToString :: MonadIO m => JSContextPtr -> JSValue -> m String
+jsToString :: MonadIO m => JSContextPtr -> JSValue -> m ByteString
 jsToString ctxPtr val = liftIO $ do
     cstring <- with val $ \valPtr -> [C.block| const char * { return JS_ToCString($(JSContext *ctxPtr), *$(JSValueConst *valPtr)); } |]
     if cstring == nullPtr then return ""
     else do
-      string <- peekCString cstring
+      string <- packCString cstring
       jsFreeCString ctxPtr cstring
       return string
 
@@ -266,7 +252,7 @@ jsToJSON ctx jsval = do
       return $ Number $ fromFloatDigits n
     JSTypeFromTag JSTagString -> do
       s <- jsToString ctx jsval
-      return $ String $ pack s
+      return $ String $ toS s
     JSIsArray -> do
       len <- do
         lenVal <- jsGetPropertyStr ctx jsval "length" 
@@ -353,7 +339,7 @@ jsObjectToJSON ctxPtr obj = do
 
             xs <- collectVals properties objPtr (index+1) end
             return $ insert k val xs
-          x -> throwM $ InternalError $ "Could not get property name" ++ show x
+          x -> throwM $ InternalError $ "Could not get property name" <> toS (encode x)
 
       | otherwise = return empty
 
@@ -370,18 +356,18 @@ jsObjectToJSON ctxPtr obj = do
 
 
 
-getErrorMessage :: MonadIO m => JSContextPtr -> m String
+getErrorMessage :: MonadIO m => JSContextPtr -> m Text
 getErrorMessage ctxPtr = liftIO $ do
   ex <- C.withPtr_ $ \ptr -> [C.block| void { *$(JSValue *ptr) = JS_GetException($(JSContext *ctxPtr)); } |]
   res <- jsToString ctxPtr ex
   jsFreeValue ctxPtr ex
-  return res
+  return $ toS res
 
 
 
-jsGetPropertyStr :: MonadIO m => JSContextPtr -> JSValue -> String -> m JSValue
+jsGetPropertyStr :: MonadIO m => JSContextPtr -> JSValue -> ByteString -> m JSValue
 jsGetPropertyStr ctxPtr val str = liftIO $
-  C.withPtr_ $ \ptr -> withCString str $ \prop -> with val $ \valPtr ->
+  C.withPtr_ $ \ptr -> useAsCString str $ \prop -> with val $ \valPtr ->
     [C.block| void { *$(JSValue *ptr) = JS_GetPropertyStr($(JSContext *ctxPtr), *$(JSValueConst *valPtr), $(const char *prop)); } |]
 
 
@@ -403,20 +389,20 @@ jsEval ctxPtr input input_len filename eval_flags = C.withPtr_ $ \ptr ->
   [C.block| void { *$(JSValue *ptr) = JS_Eval($(JSContext *ctxPtr), $(const char *input), $(size_t input_len), $(const char *filename), $(int eval_flags)); } |]
 
 
-evalRaw :: JSContextPtr -> JSEvalType -> String -> IO JSValue
+evalRaw :: JSContextPtr -> JSEvalType -> ByteString -> IO JSValue
 evalRaw ctx eTyp code = 
-    withCString "script.js" $ \cfilename ->
-        withCStringLen code $ \(ccode, ccode_len) -> 
+    useAsCString "script.js" $ \cfilename ->
+        useAsCStringLen code $ \(ccode, ccode_len) -> 
             jsEval ctx ccode (fromIntegral ccode_len) cfilename (toCType eTyp)
 
 
 
 
-evalAs :: (MonadMask m, MonadReader JSContextPtr m, MonadIO m) => JSEvalType -> String -> m Value
+evalAs :: (MonadMask m, MonadReader JSContextPtr m, MonadIO m) => JSEvalType -> ByteString -> m Value
 evalAs eTyp code = do
   ctx <- ask
   val <- liftIO $ evalRaw ctx eTyp code
-  checkIsException "evalAs" ctx val
+  -- checkIsException "evalAs" ctx val
   jsToJSON ctx val `finally` freeJSValue val
 
 
@@ -424,10 +410,10 @@ evalAs eTyp code = do
 {-|
 Evaluates the given string and returns a 'Value' (if the result can be converted).
 -}
-eval :: (MonadMask m, MonadReader JSContextPtr m, MonadIO m) => String -> m Value
+eval :: (MonadMask m, MonadReader JSContextPtr m, MonadIO m) => ByteString -> m Value
 eval = evalAs Global
 
-evalAs_ :: (MonadThrow m, MonadReader JSContextPtr m, MonadIO m) => JSEvalType -> String -> m ()
+evalAs_ :: (MonadThrow m, MonadReader JSContextPtr m, MonadIO m) => JSEvalType -> ByteString -> m ()
 evalAs_ eTyp code = do
   ctx <- ask
   val <- liftIO $ evalRaw ctx eTyp code
@@ -441,7 +427,7 @@ More efficient than 'eval' if we don't care about the value of the expression,
 e.g. if we are evaluating a function definition or performing other side-effects such as
 printing to console/modifying state.
 -}
-eval_ :: (MonadThrow m, MonadReader JSContextPtr m, MonadIO m) => String -> m ()
+eval_ :: (MonadThrow m, MonadReader JSContextPtr m, MonadIO m) => ByteString -> m ()
 eval_ = evalAs_ Global
 
 -- toJSValue :: Aeson.ToJSON a => (MonadCatch m, MonadReader JSContextPtr m, MonadIO m) => a -> m JSValue
@@ -482,12 +468,12 @@ withJSValue v f = do
 
 
 
-callRaw :: (MonadThrow m, MonadIO m) => JSContextPtr -> String -> [JSValue] -> m JSValue
+callRaw :: (MonadThrow m, MonadIO m) => JSContextPtr -> ByteString -> [JSValue] -> m JSValue
 callRaw ctxPtr funName args = do
     globalObject <- liftIO $ C.withPtr_ $ \globalObjectPtr ->
       [C.block| void { *$(JSValue *globalObjectPtr) = JS_GetGlobalObject($(JSContext *ctxPtr)); } |]
 
-    fun <- liftIO $ C.withPtr_ $ \funPtr -> withCString funName $ \cfunName -> with globalObject $ \globalObjectPtr ->
+    fun <- liftIO $ C.withPtr_ $ \funPtr -> useAsCString funName $ \cfunName -> with globalObject $ \globalObjectPtr ->
       [C.block| void { *$(JSValue *funPtr) = JS_GetPropertyStr($(JSContext *ctxPtr), *$(JSValueConst *globalObjectPtr), $(const char *cfunName)); } |]
 
     liftIO $ jsFreeValue ctxPtr globalObject
@@ -498,12 +484,12 @@ callRaw ctxPtr funName args = do
         err <- getErrorMessage ctxPtr 
         liftIO $ jsFreeValue ctxPtr fun
         throwM $ JSException "callRaw" err
-      JSTypeFromTag JSTagUndefined -> throwM $ JSValueUndefined funName
+      JSTypeFromTag JSTagUndefined -> throwM $ JSValueUndefined $ toS funName
       JSTypeFromTag JSTagObject -> do
         res <- liftIO $ withArrayLen args $ \len argv -> jsCall ctxPtr fun (fromIntegral $ len) argv
         liftIO $ jsFreeValue ctxPtr fun
         return res
-      _ -> throwM $ JSValueIncorrectType {name = funName, expected = JSTypeFromTag JSTagObject, found = ty }
+      _ -> throwM $ JSValueIncorrectType {name = toS funName, expected = JSTypeFromTag JSTagObject, found = ty }
 
 
 -- call :: (MonadThrow m, MonadReader JSContextPtr m, MonadIO m) => String -> [JSValue] -> m JSValue
@@ -515,7 +501,7 @@ callRaw ctxPtr funName args = do
 
 
 
-call :: (MonadMask m, MonadReader JSContextPtr m, MonadIO m) => String -> [JSValue] -> m Value
+call :: (MonadMask m, MonadReader JSContextPtr m, MonadIO m) => ByteString -> [JSValue] -> m Value
 call funName args = do
   ctx <- ask
   val <- callRaw ctx funName args

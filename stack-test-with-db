@@ -1,0 +1,29 @@
+#!/bin/bash
+BASE_PORT=5432
+INCREMENT=1
+
+port=$BASE_PORT
+
+isfree=$(netstat -taln | grep $port)
+
+while [[ -n "$isfree" ]]; do
+  port=$[port+INCREMENT]
+  isfree=$(netstat -taln | grep $port)
+done
+
+echo "Usable port for DB found: $port"
+
+echo "Starting a docker postgres container..."
+docker run --rm --name cv-convert-test-postgres -p $port:5432 -e POSTGRES_PASSWORD=mysecretpassword -d postgres
+
+
+Cleanup() {
+  echo "Stopping the postgres container..."
+  docker stop cv-convert-test-postgres
+}
+
+echo "Running 'stack test'..."
+trap Cleanup EXIT
+
+stack test --ta "--postgres-db-config postgresql://postgres:mysecretpassword@localhost:$port/postgres"
+

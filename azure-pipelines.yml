@@ -11,26 +11,18 @@
 trigger:
 - master
 
-resources:
-  containers:
-  - container: my_container
-    image: ubuntu:latest
-  - container: postgres
-    image: postgres
-    ports:
-    - 5432
-    options: -e POSTGRES_PASSWORD=mysecretpassword
-
 variables:
   STACK_ROOT: /home/vsts/.stack
 
 pool:
   vmImage: 'ubuntu-latest'
 
-container: my_container
 services:
-  postgres: postgres
-
+  postgres:
+    image: postgres
+    ports:
+    - 5432
+    options: -e POSTGRES_PASSWORD=mysecretpassword
 
 steps:
 - task: Cache@2

@@ -22,7 +22,12 @@ Afterwards, we can run
 
 ## Tests
 
-For tests, run `stack test` (`stack test --docker --docker-image static-haskell-alpine-8.8.3` if running via docker). The tests are located in the `test/` folder and mirror the structure of the code inside the `src` folder, i.e.
+For tests, run `./stack-test-with-db`. The tests are located in the `test/` folder and mirror the structure of the code inside the `src` folder, i.e.
 for `src/JSON/Utils.hs` we will have a corresponding test file `test/JSON/Utils/Tests.hs`. All tests are collected and run via `test/Spec.hs`.
 
 *If running Stack locally on a mac, I would recommend also running `stack test --docker --docker-image static-haskell-alpine-8.8.3`, as there might be subtle differences that might show up when testing on Linux. Since we use, Azure pipelines CI, which currently build on a Linux VM, the CI tests might fail even if the tests ran succesfully on your local mac.*
+
+## TODO
+
+Set up DB tests for stack test --docker?
+Set up automatic binary builds for tagged releases?

@@ -64,7 +64,7 @@ instance Convertible FileID SqlValue where
 Stores a row in the JSON 'Value' format (serialising into the JSONB type in Postres). 
 If the 'SourceID' and 'SubjectID' alredy exist, the old record is overwritten.
 -}
-[yesh|
+[yesh1|
 -- name:insertJSONBOverwriteOnConflict :: ()
 -- :sourceID :: SourceID
 -- :fileID :: FileID
@@ -76,7 +76,7 @@ INSERT INTO eavs_jsonb(source_id, "fileName", subject_id, data)
 |]
 
 
-[yesh|
+[yesh1|
 -- name:insertEAV_ :: ()
 -- :uuid :: UUID
 -- :sourceID :: String
@@ -183,7 +183,7 @@ the @values@ of both rows will get merged with the values already in the table:
 +-----------+---------------------+---------------------------------+
 
 -}
-[yesh|
+[yesh1|
 -- name:insertJSONBAttributesValuesMergeOnConflict :: ()
 -- :sourceID :: SourceID
 -- :attr :: Value
@@ -199,7 +199,7 @@ This function removes duplicates in the @values@ column of the @eavs_jsonb_attri
 
 Should be run after we have inserted all the records via 'insertJSONBAttributesValuesMergeOnConflict'.
 -}
-[yesh|
+[yesh1|
 -- name:cleanupJSONBAttributesValues :: (Int)
 UPDATE eavs_jsonb_attributes_values SET "values" = (
   SELECT array_to_json(array(SELECT DISTINCT jsonb_array_elements(t1."values"))) 

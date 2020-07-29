@@ -11,12 +11,25 @@
 trigger:
 - master
 
-pool:
-  vmImage: 'ubuntu-latest'
-
+resources:
+  containers:
+  - container: my_container
+    image: ubuntu-latest
+  - container: postgres
+    image: postgres
+    ports:
+    - 5432
+    options: -e POSTGRES_PASSWORD=mysecretpassword
 
 variables:
   STACK_ROOT: /home/vsts/.stack
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+container: my_container
+services:
+  postgres: postgres
 
 
 steps:
@@ -44,7 +57,8 @@ steps:
 - script: |
     export PATH=$HOME/.local/bin:$PATH
     # Build the package, its tests, and its docs and run the tests
-    stack test --haddock --no-haddock-deps
+    # stack test --haddock --no-haddock-deps
+    stack test --ta "--postgres-db-config postgresql://postgres:mysecretpassword@postgres:5432/postgres"
   displayName: Test Package
 - bash: |
     mkdir -p .azure-cache

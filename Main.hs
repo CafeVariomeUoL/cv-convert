@@ -2,6 +2,7 @@
 
 import           Options.Generic
 import           System.IO                    (openFile, IOMode(..))
+import           Main.Utf8                    (withUtf8)
 import           Data.Aeson                   (decode)
 import           Data.Maybe                   (fromMaybe)
 import qualified Data.ByteString.Lazy         as BS
@@ -44,7 +45,7 @@ deriving instance Show (Options Unwrapped)
 
 
 main :: IO ()
-main = do
+main = withUtf8 $ do
   Options{..} <- unwrapRecord "CV convert CLI"
   let envPath = fromMaybe "./env" env
   envExists <- doesFileExist envPath

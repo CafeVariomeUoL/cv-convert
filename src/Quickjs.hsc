@@ -12,7 +12,7 @@ This is a very basic wrapper for the [QuickJS](https://bellard.org/quickjs/) .
 The current functionality includes evaluating JS code, calling a JS function in the global scope
 and marshalling 'Value's to and from 'JSValue's.
 -}
-module Quickjs (JSValue, JSContextPtr, quickjs, call, eval, eval_, withJSValue, fromJSValue_) where
+module Quickjs (JSValue, JSContextPtr, quickjs, call, eval, eval_, withJSValue, fromJSValue_, quickjsTest) where
 
 import           Foreign
 import           Foreign.C                   (CString, CInt, CDouble, CSize)
@@ -31,7 +31,9 @@ import           Data.Text                   (Text)
 import           Data.Vector                 (fromList, imapM_)
 import           Data.HashMap.Strict         (HashMap, empty, insert, toList)
 import           Data.String.Conv            (toS)
-
+-- import System.Mem(performGC)
+import Control.Concurrent(isCurrentThreadBound, runInBoundThread)
+import Control.Monad.IO.Unlift(MonadUnliftIO(..), UnliftIO(..), askUnliftIO)
 import           Quickjs.Types
 import           Quickjs.Error
 
@@ -461,9 +463,10 @@ and passed as an argument to the callback function, provided as the second argum
 -}
 withJSValue :: (MonadMask m, MonadReader JSContextPtr m, MonadIO m, Aeson.ToJSON a) => a -> (JSValue -> m b) -> m b
 withJSValue v f = do
+
   ctx <- ask
   val <- jsonToJSValue ctx (Aeson.toJSON v)
-  do { checkIsException "withJSValue" ctx val ; f val } `finally` freeJSValue val
+  f val `finally` freeJSValue val
 
 
 
@@ -505,7 +508,7 @@ call :: (MonadMask m, MonadReader JSContextPtr m, MonadIO m) => ByteString -> [J
 call funName args = do
   ctx <- ask
   val <- callRaw ctx funName args
-  do { checkIsException "call" ctx val; jsToJSON ctx val } `finally` freeJSValue val
+  jsToJSON ctx val `finally` freeJSValue val
 
 
 freeJSValue :: (MonadThrow m, MonadReader JSContextPtr m, MonadIO m) => JSValue -> m ()
@@ -539,12 +542,14 @@ Pass a Haskell value to the JS runtime:
 -}
 quickjs :: MonadIO m => ReaderT (Ptr JSContext) m b -> m b
 quickjs f = do
-  rt <- liftIO $ jsNewRuntime
-  ctx <- liftIO $ jsNewContext rt
+  (rt, ctx) <- liftIO $ do
+    _rt <- jsNewRuntime
+    _ctx <- jsNewContext _rt
 
-  liftIO $ [C.block| void { 
-    js_std_add_helpers($(JSContext *ctx), -1, NULL);
-  } |]
+    [C.block| void { 
+      js_std_add_helpers($(JSContext *_ctx), -1, NULL);
+    } |]
+    return (_rt, _ctx)
 
   res <- runReaderT f ctx
   cleanup ctx rt
@@ -553,3 +558,27 @@ quickjs f = do
     cleanup ctx rt = liftIO $ do
       jsFreeContext ctx
       jsFreeRuntime rt
+      -- performGC
+
+
+
+quickjsTest :: MonadUnliftIO m => ReaderT (Ptr JSContext) m b -> m b
+quickjsTest f = do
+  (u :: UnliftIO m) <- askUnliftIO
+  
+  liftIO $ runInBoundThread $ do
+    rt <- jsNewRuntime
+    ctx <- jsNewContext rt
+
+    [C.block| void { 
+      js_std_add_helpers($(JSContext *ctx), -1, NULL);
+    } |]
+
+    res <-  unliftIO u $ runReaderT f ctx
+    cleanup ctx rt
+    return res
+  where
+    cleanup ctx rt = do
+      jsFreeContext ctx
+      jsFreeRuntime rt
+      -- performGC

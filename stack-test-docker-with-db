@@ -31,5 +31,5 @@ Cleanup() {
 echo "Running 'stack test'..."
 trap Cleanup EXIT
 
-stack test --ta "--postgres-db-config postgresql://postgres:mysecretpassword@localhost:$port/postgres"
+stack test --docker --docker-image static-haskell-alpine-8.8.3 --ta "--postgres-db-config postgresql://postgres:mysecretpassword@localhost:$port/postgres"
 

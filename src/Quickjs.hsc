@@ -31,7 +31,7 @@ import           Data.Text                   (Text)
 import           Data.Vector                 (fromList, imapM_)
 import           Data.HashMap.Strict         (HashMap, empty, insert, toList)
 import           Data.String.Conv            (toS)
-import           Control.Concurrent          (isCurrentThreadBound, runInBoundThread)
+import           Control.Concurrent          (rtsSupportsBoundThreads, runInBoundThread)
 import           Control.Monad.IO.Unlift     (MonadUnliftIO(..), UnliftIO(..), askUnliftIO)
 
 import           Quickjs.Types
@@ -570,22 +570,23 @@ This porblem does not occur when running via Main.hs, since we compile the app a
 For more info see the paper [Extending the Haskell Foreign Function Interface with Concurrency](https://simonmar.github.io/bib/papers/conc-ffi.pdf)
 -}
 quickjsTest :: MonadUnliftIO m => ReaderT (Ptr JSContext) m b -> m b
-quickjsTest f = do
-  (u :: UnliftIO m) <- askUnliftIO
-  
-  liftIO $ runInBoundThread $ do
-    rt <- jsNewRuntime
-    ctx <- jsNewContext rt
+quickjsTest f 
+  | rtsSupportsBoundThreads = do
+    (u :: UnliftIO m) <- askUnliftIO
+    
+    liftIO $ runInBoundThread $ do
+      rt <- jsNewRuntime
+      ctx <- jsNewContext rt
 
-    [C.block| void { 
-      js_std_add_helpers($(JSContext *ctx), -1, NULL);
-    } |]
+      [C.block| void { 
+        js_std_add_helpers($(JSContext *ctx), -1, NULL);
+      } |]
 
-    res <-  unliftIO u $ runReaderT f ctx
-    cleanup ctx rt
-    return res
+      res <-  unliftIO u $ runReaderT f ctx
+      cleanup ctx rt
+      return res
+  | otherwise = quickjs f
   where
     cleanup ctx rt = do
       jsFreeContext ctx
       jsFreeRuntime rt
-      -- performGC

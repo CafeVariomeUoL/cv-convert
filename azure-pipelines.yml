@@ -50,7 +50,7 @@ steps:
     export PATH=$HOME/.local/bin:$PATH
     # Build the package, its tests, and its docs and run the tests
     # stack test --haddock --no-haddock-deps
-    stack test --flag 'cv-convert:azure' --jobs=1 --test-arguments '--num-threads 1' --ta "--postgres-db-config postgresql://postgres:mysecretpassword@localhost:${AGENT_SERVICES_POSTGRES_PORTS_5432}/postgres"
+    stack test --flag 'cv-convert:azure' --jobs=1 --ta "--postgres-db-config postgresql://postgres:mysecretpassword@localhost:${AGENT_SERVICES_POSTGRES_PORTS_5432}/postgres"
   displayName: Test Package
 - bash: |
     mkdir -p .azure-cache

@@ -10,7 +10,7 @@ import           Network.URI                  (URI, URIAuth, parseURI, uriPath, 
 import           Data.Default.Class           (def)
 import           Data.Proxy
 import           Data.Typeable
-import Data.List.Split(splitOn)
+import           Data.List.Split              (splitOn)
 
 -- adapted from the https://hackage.haskell.org/package/postgresql-simple-url library
 
@@ -50,9 +50,6 @@ uriAuthParameters uriAuth = port . host . auth
                  [u]    -> \info -> info { user = dropLast u }
                  [u, p] -> \info -> info { user = u, password = dropLast p }
                  _      -> id
-
-
-
 
 newtype PostgresDBConfig = PostgresDBConfig (Maybe Config)
   deriving Typeable

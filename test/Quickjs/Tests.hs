@@ -15,7 +15,7 @@ import           Quickjs
 
 
 eval_1_plus_2 :: Assertion
-eval_1_plus_2 = quickjs $ do
+eval_1_plus_2 = quickjsTest $ do
   v <- eval "1 + 2;"
   liftIO $ v @?= Number 3
 
@@ -49,7 +49,7 @@ instance QC.Arbitrary Value where
 
 marshall_to_from_JSValue :: Value -> QC.Property    
 marshall_to_from_JSValue val = QC.monadicIO $ do
-  val' <- QC.run $ quickjs $ withJSValue val $ \jsval ->
+  val' <- QC.run $ quickjsTest $ withJSValue val $ \jsval ->
     fromJSValue_ jsval
   QC.assert $ val == val'
 

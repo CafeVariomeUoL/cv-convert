@@ -31,9 +31,9 @@ import           Data.Text                   (Text)
 import           Data.Vector                 (fromList, imapM_)
 import           Data.HashMap.Strict         (HashMap, empty, insert, toList)
 import           Data.String.Conv            (toS)
--- import System.Mem(performGC)
-import Control.Concurrent(isCurrentThreadBound, runInBoundThread)
-import Control.Monad.IO.Unlift(MonadUnliftIO(..), UnliftIO(..), askUnliftIO)
+import           Control.Concurrent          (isCurrentThreadBound, runInBoundThread)
+import           Control.Monad.IO.Unlift     (MonadUnliftIO(..), UnliftIO(..), askUnliftIO)
+
 import           Quickjs.Types
 import           Quickjs.Error
 
@@ -558,10 +558,17 @@ quickjs f = do
     cleanup ctx rt = liftIO $ do
       jsFreeContext ctx
       jsFreeRuntime rt
-      -- performGC
 
 
+{-|
+This env differs from regular 'quickjs', in that it wraps the computation in the 'runInBoundThread' function.
+This is needed because tasty (the testing framework) is run mutithreaded and it seems quickjs does not like it
+when it's called from an OS thread other than the one it was started in.
+Because Haskell uses lightweight threads, this might happen if threaded mode is enabled, as is the case in testing.
+This porblem does not occur when running via Main.hs, since we compile the app as single threaded...
 
+For more info see the paper [Extending the Haskell Foreign Function Interface with Concurrency](https://simonmar.github.io/bib/papers/conc-ffi.pdf)
+-}
 quickjsTest :: MonadUnliftIO m => ReaderT (Ptr JSContext) m b -> m b
 quickjsTest f = do
   (u :: UnliftIO m) <- askUnliftIO

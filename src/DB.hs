@@ -27,14 +27,23 @@ module DB(
 ) where
 import Database.HDBC
 import Database.YeshQL.HDBC
-import Data.Aeson           (Value, encode)
+import Data.Aeson           (Value, encode, eitherDecode)
 import Data.Convertible.Base
 import Data.String.Conv     (toS)
 import Data.Text            (Text)
+import Data.ByteString.Lazy (ByteString)
 import Data.UUID            (UUID, toASCIIBytes)
 
 instance Convertible Value SqlValue where
   safeConvert v = return $ SqlString $ toS $ encode v
+
+instance Convertible SqlValue Value where
+  safeConvert v = do 
+    str :: ByteString <- safeConvert v
+    case eitherDecode str of
+      Left err -> convError err v
+      Right res -> return res
+
 
 instance Convertible UUID SqlValue where
   safeConvert v = return $ SqlByteString $ toASCIIBytes v

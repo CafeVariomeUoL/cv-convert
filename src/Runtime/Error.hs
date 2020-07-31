@@ -143,7 +143,8 @@ handleError LogToFile (Just logFile) _ lineNo err =
 handleError LogToDb _ (Just (con, srcID, fileID)) lineNo err = liftIO $ do
   putStrLn $ "Error in row " ++ show lineNo ++ ": " ++ show err
   insertError srcID fileID ("Error in row " ++ show lineNo ++ ": " ++ show err) con 
-handleError _ _ _ _ _ = undefined
+handleError LogToDb _ Nothing lineNo err = 
+  throwM $ RowError lineNo err
 
 
 

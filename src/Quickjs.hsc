@@ -36,7 +36,7 @@ import           Control.Monad.IO.Unlift     (MonadUnliftIO(..), UnliftIO(..), a
 
 import           Quickjs.Types
 import           Quickjs.Error
-
+import           Quickjs.RTS
 
 C.context quickjsCtx
 C.include "quickjs.h"
@@ -60,7 +60,7 @@ foreign import ccall "JS_FreeContext"
 
 
 jsFreeValue :: JSContextPtr -> JSValue -> IO ()
-jsFreeValue ctx val = with val $ \v -> [C.block| void {
+jsFreeValue ctx val = withRTSSignalsBlocked $ with val $ \v -> [C.block| void {
     if (JS_VALUE_HAS_REF_COUNT(*$(JSValue *v))) {
       JSRefCountHeader *p = (JSRefCountHeader *)JS_VALUE_GET_PTR(*$(JSValue *v));
       if (--p->ref_count <= 0) {
@@ -76,7 +76,7 @@ type JSValueConstPtr = Ptr JSValueConst
 
 jsIs_ :: (MonadIO m, Storable p, Eq n, Num n) => p -> (Ptr p -> IO n) -> m Bool
 jsIs_ val fun = do
-  b <- liftIO $ with val fun
+  b <- liftIO $ withRTSSignalsBlocked $ with val fun
   return $ b == 1
 
 jsIsNumber :: MonadIO m => JSValue -> m Bool
@@ -105,20 +105,20 @@ jsNullValue :: JSValue
 jsNullValue = JSValue { u = 0, tag = toCType JSTagNull }
 
 jsNewBool :: JSContextPtr -> Bool -> IO JSValue
-jsNewBool ctxPtr bool = do
+jsNewBool ctxPtr bool = withRTSSignalsBlocked $ do
   let b = if bool then 1 else 0
   C.withPtr_ $ \ptr -> [C.block| void { *$(JSValue *ptr) = JS_NewBool($(JSContext *ctxPtr), $(int b)); } |]
 
 jsNewFloat64 :: JSContextPtr -> CDouble -> IO JSValue
-jsNewFloat64 ctxPtr num =
+jsNewFloat64 ctxPtr num = withRTSSignalsBlocked $ 
   C.withPtr_ $ \ptr -> [C.block| void { *$(JSValue *ptr) = JS_NewFloat64($(JSContext *ctxPtr), $(double num)); } |]
 
 jsNewInt64 :: JSContextPtr -> Int64 -> IO JSValue
-jsNewInt64 ctxPtr num = do
+jsNewInt64 ctxPtr num = withRTSSignalsBlocked $ do
   C.withPtr_ $ \ptr -> [C.block| void { *$(JSValue *ptr) = JS_NewInt64($(JSContext *ctxPtr), $(int64_t num)); } |]
 
 jsNewString :: JSContextPtr -> ByteString -> IO JSValue
-jsNewString ctxPtr s = C.withPtr_ $ \ptr -> useAsCStringLen s $ \(cstringPtr, cstringLen) -> do
+jsNewString ctxPtr s = withRTSSignalsBlocked $ C.withPtr_ $ \ptr -> useAsCStringLen s $ \(cstringPtr, cstringLen) -> do
   let len = fromIntegral cstringLen
   [C.block| void { *$(JSValue *ptr) = JS_NewStringLen($(JSContext *ctxPtr), $(const char *cstringPtr), $(size_t len)); } |]
 
@@ -201,7 +201,7 @@ jsonToJSValue ctxPtr (Object o) = do
 
 jsToBool :: (MonadThrow m, MonadIO m) => JSContextPtr -> JSValue -> m Bool
 jsToBool ctxPtr val = do
-    code <- liftIO $ with val $ \valPtr -> [C.block| int { return JS_ToBool($(JSContext *ctxPtr), *$(JSValueConst *valPtr)); } |]
+    code <- liftIO $ withRTSSignalsBlocked $ with val $ \valPtr -> [C.block| int { return JS_ToBool($(JSContext *ctxPtr), *$(JSValueConst *valPtr)); } |]
     case code of
         -1 -> getErrorMessage ctxPtr >>= throwM . JSException "jsToBool"
         0 -> return False
@@ -209,14 +209,14 @@ jsToBool ctxPtr val = do
 
 jsToInt64 :: (MonadThrow m, MonadIO m) => JSContextPtr -> JSValue -> m Int64
 jsToInt64 ctxPtr val = do
-  (res, code) <- liftIO $ C.withPtr $ \intPtr -> with val $ \valPtr -> [C.block| int { return JS_ToInt64($(JSContext *ctxPtr), $(int64_t *intPtr), *$(JSValueConst *valPtr)); } |]
+  (res, code) <- liftIO $ withRTSSignalsBlocked $ C.withPtr $ \intPtr -> with val $ \valPtr -> [C.block| int { return JS_ToInt64($(JSContext *ctxPtr), $(int64_t *intPtr), *$(JSValueConst *valPtr)); } |]
   if code == 0 then return res
   else getErrorMessage ctxPtr >>= throwM . JSException "jsToInt64"
 
 
 jsToFloat64 :: (MonadThrow m, MonadIO m) => JSContextPtr -> JSValue -> m CDouble
 jsToFloat64 ctxPtr val = do
-  (res, code) <- liftIO $ C.withPtr $ \doublePtr -> with val $ \valPtr -> [C.block| int { return JS_ToFloat64($(JSContext *ctxPtr), $(double *doublePtr), *$(JSValueConst *valPtr)); } |]
+  (res, code) <- liftIO $ withRTSSignalsBlocked $ C.withPtr $ \doublePtr -> with val $ \valPtr -> [C.block| int { return JS_ToFloat64($(JSContext *ctxPtr), $(double *doublePtr), *$(JSValueConst *valPtr)); } |]
   if code == 0 then return res
   else getErrorMessage ctxPtr >>= throwM . JSException "jsToFloat64"
 
@@ -224,7 +224,7 @@ jsToFloat64 ctxPtr val = do
 
 jsToString :: MonadIO m => JSContextPtr -> JSValue -> m ByteString
 jsToString ctxPtr val = liftIO $ do
-    cstring <- with val $ \valPtr -> [C.block| const char * { return JS_ToCString($(JSContext *ctxPtr), *$(JSValueConst *valPtr)); } |]
+    cstring <- withRTSSignalsBlocked $ with val $ \valPtr -> [C.block| const char * { return JS_ToCString($(JSContext *ctxPtr), *$(JSValueConst *valPtr)); } |]
     if cstring == nullPtr then return ""
     else do
       string <- packCString cstring
@@ -275,7 +275,7 @@ jsArrayToJSON ctxPtr jsval index len =
   if index < len then do
     v <- do
       let idx = fromIntegral index
-      val <- liftIO $ C.withPtr_ $ \ptr -> with jsval $ \jsvalPtr -> 
+      val <- liftIO $ withRTSSignalsBlocked $ C.withPtr_ $ \ptr -> with jsval $ \jsvalPtr -> 
         [C.block| void { *$(JSValue *ptr) = JS_GetPropertyUint32($(JSContext *ctxPtr), *$(JSValueConst *jsvalPtr), $(uint32_t idx)); } |]
 
       checkIsException "jsArrayToJSON" ctxPtr val
@@ -323,7 +323,7 @@ jsObjectToJSON ctxPtr obj = do
         let i = fromIntegral index
 
         key <- do
-          key' <- liftIO $ C.withPtr_ $ \ptr -> [C.block| void { *$(JSValue *ptr) = JS_AtomToString($(JSContext *ctxPtr), (*$(JSPropertyEnum **properties))[$(uint32_t i)].atom); } |]
+          key' <- liftIO $ withRTSSignalsBlocked $ C.withPtr_ $ \ptr -> [C.block| void { *$(JSValue *ptr) = JS_AtomToString($(JSContext *ctxPtr), (*$(JSPropertyEnum **properties))[$(uint32_t i)].atom); } |]
           checkIsException "jsObjectToJSON/collectVals/1" ctxPtr key'
           res <- jsToJSON ctxPtr key'
           liftIO $ jsFreeValue ctxPtr key'
@@ -332,7 +332,7 @@ jsObjectToJSON ctxPtr obj = do
         case key of 
           String k -> do
             val <-  do
-              val' <- liftIO $ C.withPtr_ $ \ptr ->
+              val' <- liftIO $ withRTSSignalsBlocked $ C.withPtr_ $ \ptr ->
                 [C.block| void { *$(JSValue *ptr) = JS_GetProperty($(JSContext *ctxPtr), *$(JSValueConst *objPtr), (*$(JSPropertyEnum **properties))[$(uint32_t i)].atom); } |]
               checkIsException "jsObjectToJSON/collectVals/2" ctxPtr val'
               res <- jsToJSON ctxPtr val'
@@ -346,7 +346,7 @@ jsObjectToJSON ctxPtr obj = do
       | otherwise = return empty
 
     cleanup :: MonadIO m => Ptr (Ptr JSPropertyEnum) -> Int -> m ()
-    cleanup properties plen = liftIO $ do
+    cleanup properties plen = liftIO $ withRTSSignalsBlocked $ do
       forLoop plen $ \index -> do
         let i = fromIntegral index
         [C.block| void { JS_FreeAtom($(JSContext *ctxPtr), (*$(JSPropertyEnum **properties))[$(uint32_t i)].atom); }|]
@@ -360,7 +360,7 @@ jsObjectToJSON ctxPtr obj = do
 
 getErrorMessage :: MonadIO m => JSContextPtr -> m Text
 getErrorMessage ctxPtr = liftIO $ do
-  ex <- C.withPtr_ $ \ptr -> [C.block| void { *$(JSValue *ptr) = JS_GetException($(JSContext *ctxPtr)); } |]
+  ex <- withRTSSignalsBlocked $ C.withPtr_ $ \ptr -> [C.block| void { *$(JSValue *ptr) = JS_GetException($(JSContext *ctxPtr)); } |]
   res <- jsToString ctxPtr ex
   jsFreeValue ctxPtr ex
   return $ toS res
@@ -368,26 +368,26 @@ getErrorMessage ctxPtr = liftIO $ do
 
 
 jsGetPropertyStr :: MonadIO m => JSContextPtr -> JSValue -> ByteString -> m JSValue
-jsGetPropertyStr ctxPtr val str = liftIO $
+jsGetPropertyStr ctxPtr val str = liftIO $ withRTSSignalsBlocked $ 
   C.withPtr_ $ \ptr -> useAsCString str $ \prop -> with val $ \valPtr ->
     [C.block| void { *$(JSValue *ptr) = JS_GetPropertyStr($(JSContext *ctxPtr), *$(JSValueConst *valPtr), $(const char *prop)); } |]
 
 
 jsGetOwnPropertyNames :: (MonadThrow m, MonadIO m) => JSContextPtr -> JSValue -> Ptr (Ptr JSPropertyEnum) -> CInt -> m Int
 jsGetOwnPropertyNames ctxPtr val properties flags = do
-  (len,code) <- liftIO $ C.withPtr $ \plen -> with val $ \valPtr -> 
+  (len,code) <- liftIO $ withRTSSignalsBlocked $ C.withPtr $ \plen -> with val $ \valPtr -> 
     [C.block| int { return JS_GetOwnPropertyNames($(JSContext *ctxPtr), $(JSPropertyEnum **properties), $(uint32_t *plen), *$(JSValueConst *valPtr), $(int flags)); } |]
   if code == 0 then return (fromIntegral len)
   else throwM $ InternalError "Could not get object properties"
 
 
 jsCall :: JSContextPtr -> JSValue -> CInt -> (Ptr JSValue) -> IO JSValue
-jsCall ctxt fun_obj argc argv = C.withPtr_ $ \res -> with fun_obj $ \funPtr -> 
+jsCall ctxt fun_obj argc argv = withRTSSignalsBlocked $ C.withPtr_ $ \res -> with fun_obj $ \funPtr -> 
   [C.block| void { *$(JSValue *res) = JS_Call($(JSContext *ctxt), *$(JSValueConst *funPtr), JS_NULL, $(int argc), $(JSValueConst *argv)); } |]
 
 
 jsEval :: JSContextPtr -> CString -> CSize -> CString -> CInt -> IO JSValue
-jsEval ctxPtr input input_len filename eval_flags = C.withPtr_ $ \ptr -> 
+jsEval ctxPtr input input_len filename eval_flags = withRTSSignalsBlocked $ C.withPtr_ $ \ptr -> 
   [C.block| void { *$(JSValue *ptr) = JS_Eval($(JSContext *ctxPtr), $(const char *input), $(size_t input_len), $(const char *filename), $(int eval_flags)); } |]
 
 
@@ -473,10 +473,10 @@ withJSValue v f = do
 
 callRaw :: (MonadThrow m, MonadIO m) => JSContextPtr -> ByteString -> [JSValue] -> m JSValue
 callRaw ctxPtr funName args = do
-    globalObject <- liftIO $ C.withPtr_ $ \globalObjectPtr ->
+    globalObject <- liftIO $ withRTSSignalsBlocked $ C.withPtr_ $ \globalObjectPtr ->
       [C.block| void { *$(JSValue *globalObjectPtr) = JS_GetGlobalObject($(JSContext *ctxPtr)); } |]
 
-    fun <- liftIO $ C.withPtr_ $ \funPtr -> useAsCString funName $ \cfunName -> with globalObject $ \globalObjectPtr ->
+    fun <- liftIO $ withRTSSignalsBlocked $ C.withPtr_ $ \funPtr -> useAsCString funName $ \cfunName -> with globalObject $ \globalObjectPtr ->
       [C.block| void { *$(JSValue *funPtr) = JS_GetPropertyStr($(JSContext *ctxPtr), *$(JSValueConst *globalObjectPtr), $(const char *cfunName)); } |]
 
     liftIO $ jsFreeValue ctxPtr globalObject
@@ -489,8 +489,8 @@ callRaw ctxPtr funName args = do
         throwM $ JSException "callRaw" err
       JSTypeFromTag JSTagUndefined -> throwM $ JSValueUndefined $ toS funName
       JSTypeFromTag JSTagObject -> do
-        res <- liftIO $ withArrayLen args $ \len argv -> jsCall ctxPtr fun (fromIntegral $ len) argv
-        liftIO $ jsFreeValue ctxPtr fun
+        res <- liftIO $ withRTSSignalsBlocked $ withArrayLen args $ \len argv -> jsCall ctxPtr fun (fromIntegral $ len) argv
+        liftIO $ withRTSSignalsBlocked $ jsFreeValue ctxPtr fun
         return res
       _ -> throwM $ JSValueIncorrectType {name = toS funName, expected = JSTypeFromTag JSTagObject, found = ty }
 
@@ -574,18 +574,18 @@ quickjsTest f = do
   (u :: UnliftIO m) <- askUnliftIO
   
   liftIO $ runInBoundThread $ do
-    rt <- jsNewRuntime
-    ctx <- jsNewContext rt
+    rt <- withRTSSignalsBlocked $ jsNewRuntime
+    ctx <- withRTSSignalsBlocked $ jsNewContext rt
 
-    [C.block| void { 
+    withRTSSignalsBlocked $ [C.block| void { 
       js_std_add_helpers($(JSContext *ctx), -1, NULL);
     } |]
 
-    res <-  unliftIO u $ runReaderT f ctx
+    res <- unliftIO u $ runReaderT f ctx
     cleanup ctx rt
     return res
   where
-    cleanup ctx rt = do
+    cleanup ctx rt = withRTSSignalsBlocked $ do
       jsFreeContext ctx
       jsFreeRuntime rt
       -- performGC

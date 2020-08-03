@@ -140,7 +140,7 @@ test-suite cv-convert-test
   other-modules:
       Quickjs.Tests Runtime.Tests JSON.Utils.Tests
   default-extensions:
-    ScopedTypeVariables, OverloadedStrings, DerivingStrategies, GeneralizedNewtypeDeriving, DeriveGeneric, DeriveAnyClass, FlexibleContexts
+    ScopedTypeVariables, OverloadedStrings, DerivingStrategies, GeneralizedNewtypeDeriving, DeriveGeneric, DeriveAnyClass, FlexibleContexts, RecordWildCards
   hs-source-dirs:
       test
   if !flag(azure)
@@ -151,6 +151,7 @@ test-suite cv-convert-test
     , tasty
     , tasty-hunit
     , tasty-quickcheck
+    , tasty-golden
     , HUnit
     , QuickCheck
     , aeson
@@ -172,4 +173,6 @@ test-suite cv-convert-test
     , HDBC
     , bytestring
     , filepath
+    , directory
+    , strings
   default-language: Haskell2010

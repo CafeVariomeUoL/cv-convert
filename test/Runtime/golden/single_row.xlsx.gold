@@ -1,0 +1,30 @@
+[
+{
+    "AttM_MMSE-V2": 999,
+    "Met_Date_V1_DoctorId": 1,
+    "Met_Date_V2_Doctorid": 999,
+    "AttM_Right_Hippocampus_mm3": 5197.9,
+    "Att_APOE": "Apo-Œµ3/Œµ3",
+    "Prop_Date_V2": 999,
+    "Prop_Date_Visita_MRI": 41835,
+    "Met_Date_V2_LengthofTest": 999,
+    "Met_Date_V1_LengthofTest": 24,
+    "AttM_Total_Intracraneal_Volume_mm3": 1544503.965,
+    "Prop_Date_V1": 41562,
+    "Att_Years_of_education": 18,
+    "AttM_Left_Hippocampus_TIV": 4.284241000000001e-3,
+    "AttM_Left_Hippocampal_MTA": "Score 1:  S√≥lo la ampliaci√≥n de la fisura coroide",
+    "AttM_Brain_seg_mm3": 1168165,
+    "AttM_MMSE-V1": 30,
+    "AttM_Right_Hippocampus_TIV": 4.449628e-3,
+    "Att_AD_family_History": "mother",
+    "AttM_Right_Hippocampal_MTA": "Score 1:  S√≥lo la ampliaci√≥n de la fisura coroide",
+    "AttM_Left_Hippocampapus_mm3": 5004.7,
+    "AttM_MIS-V2": 999,
+    "Att_Diagnosis": "mci",
+    "subject_id": 1,
+    "AttM_MIS-V1": 8,
+    "Att_Gender": "Male",
+    "i": 0
+}
+]

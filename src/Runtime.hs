@@ -31,7 +31,7 @@ import qualified Data.HashMap.Strict          as HM
 import           Control.Monad.Catch          (MonadThrow(..), MonadMask(..), catch, bracket)
 import           Control.Monad.Reader         (MonadReader)
 import           Control.Lens.Combinators     (FoldableWithIndex, ifoldlM)
-import           System.FilePath.Posix        (takeFileName, (-<.>))
+import           System.FilePath.Posix        (takeFileName, (<.>))
 import           Data.Char                    (toLower)
 import           Data.String.Conv             (toS)
 import           System.Directory             (doesFileExist)
@@ -284,7 +284,7 @@ processFile dbConnInfo source_id rowFun validator fName sheetName fType onError 
   bracket
     -- open log file if LogToFile was passed to onError
     (liftIO $ case onError of
-      LogToFile -> writeFile (fName -<.> "log") "" >> openFile (fName -<.> "log") AppendMode >>= return . Just
+      LogToFile -> writeFile (fName <.> "log") "" >> openFile (fName <.> "log") AppendMode >>= return . Just
       _ -> return Nothing)
     -- close the log file after we processed the file
     (liftIO . mapM_ hClose) $
@@ -323,7 +323,7 @@ processFile dbConnInfo source_id rowFun validator fName sheetName fType onError 
         _ -> 
           bracket
             -- open an output file and write an opening bracket '['
-            (liftIO $ writeFile (fName -<.> "out.json") "[\n" >> openFile (fName -<.> "out.json") AppendMode)
+            (liftIO $ writeFile (fName <.> "out.json") "[\n" >> openFile (fName <.> "out.json") AppendMode)
             -- after the main body, write closing bracket ']' and close the file
             (\outputFile -> liftIO $ BSL.hPutStr outputFile "\n]" >> hClose outputFile) $
             -- main body

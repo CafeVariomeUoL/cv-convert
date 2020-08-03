@@ -1,19 +1,22 @@
 {-# LANGUAGE QuasiQuotes, OverloadedLists #-}
 
 module Runtime.Tests(tests) where
-import           Test.Tasty              (TestTree, testGroup, after, DependencyType(..),)
-import           Test.Tasty.HUnit        (testCase, assertBool)
+import           Test.Tasty                   (TestTree, testGroup, after, DependencyType(..),)
+import           Test.Tasty.HUnit             (testCase, assertBool)
 -- import           Test.Tasty.QuickCheck   (testProperty, QuickCheckTests(..), QuickCheckVerbose(..))
-import           Test.HUnit              (Assertion, (@?=))
+import           Test.HUnit                   (Assertion, (@?=))
+import           Test.Tasty.Golden            (goldenVsFile)
 -- import qualified Test.QuickCheck         as QC
 -- import qualified Test.QuickCheck.Monadic as QC
-import           Data.Aeson              (Value(..), decode)
-import           Control.Monad.IO.Class  (liftIO)
-import           Control.Monad.Catch     (bracket)
-import           Data.Text               (Text)
-import           Data.ByteString         (ByteString)
-import           Data.String.Conv        (toS)
-
+import           Data.Aeson                   (Value(..), decode)
+import           Control.Monad.IO.Class       (liftIO)
+import           Control.Monad.Catch          (try, bracket, throwM)
+import           Data.Text                    (Text)
+import           Data.ByteString              (ByteString)
+import qualified Data.ByteString              as BS
+import qualified Data.ByteString.Lazy         as BSL
+import           Data.String.Conv             (toS)
+import           Data.Strings                 (strEndsWith, strCapitalize, strReplace)
 -- import qualified Data.HashMap.Strict            as HS
 -- import qualified Data.Vector             as V
 import           Data.String.Interpolate      (i)
@@ -21,16 +24,21 @@ import           Main.Utf8                    (withUtf8)
 import           Database.HDBC.PostgreSQL.Pure(Config, connect)
 import           Database.HDBC.Types          (IConnection(commit, disconnect))
 import           Database.YeshQL.HDBC
-import           System.FilePath.Posix        (takeFileName)
+import           System.FilePath.Posix        (takeBaseName, takeFileName, takeExtension, (</>), (<.>))
+import           System.Directory             (getDirectoryContents, removeFile)
+import           Data.Maybe                   (fromMaybe)
+import           Data.List                    (sortBy)
+import           Control.Exception            (SomeException)
 
 import           Runtime
 import           Runtime.Error
 import           Quickjs
+import           Quickjs.Error
 import           DB
 
 
 
-lib_js = [i|let Utils = {
+test_lib_js = [i|let Utils = {
   helloWorld: function() {return 2;}
 }
 export default Utils;|]
@@ -38,11 +46,12 @@ export default Utils;|]
 
 load_lib :: Assertion
 load_lib = do
-    withUtf8 $ writeFile "./test-lib.js" lib_js
+    withUtf8 $ writeFile "./test_lib.js" test_lib_js
     quickjsTest $ do
-      loadLibrary "./test-lib.js"
+      loadLibrary "./test_lib.js"
       v <- eval "Utils.helloWorld();"
       liftIO $ v @?= Number 2
+    removeFile "./test_lib.js"
 
 
 
@@ -118,6 +127,12 @@ create_tables config =
     makeDatabaseSchema
 
 
+
+[yesh1|
+-- name:clear_eavs_jsonb
+DELETE FROM eavs_jsonb;
+|]
+
 [yesh1|
 -- name:prepare_DB_for_test
 -- :fileName :: String
@@ -134,9 +149,9 @@ SELECT CAST(data AS VARCHAR)
 |]
 
 
-test_process_file :: Config -> String -> String -> ByteString -> [Value] -> Assertion
-test_process_file config file file_contents row_fun expected = do
-  bracket (connect config) (\con -> commit con >> disconnect con) (prepare_DB_for_test (takeFileName file))
+testProcessFileWithDB :: Config -> String -> String -> ByteString -> [Value] -> Assertion
+testProcessFileWithDB config file file_contents row_fun expected = do
+  bracket (connect config) (\con -> commit con >> disconnect con) (\con -> clear_eavs_jsonb con >> prepare_DB_for_test (takeFileName file) con)
   withUtf8 $ writeFile file file_contents
   r <- quickjsTest $ do
     _ <- eval_ $ "rowFun = function(row, header) { " <> row_fun <> " }"
@@ -153,6 +168,7 @@ test_process_file config file file_contents row_fun expected = do
   bracket (connect config) (\con -> commit con >> disconnect con) $ \con -> do
     res <- selectAllFromEAVS_JSONB (takeFileName file) con
     res @?= expected
+  removeFile file
 
   where
     rowFun row header = call "rowFun" [row, header]
@@ -165,6 +181,15 @@ test_file_json_1 = [i|{
   "heart_rate": [110, 98, 123],
   "blood_pressure": [{"sys":95, "dia": 65}, {"sys":105, "dia": 72}, {"sys":98, "dia": 68}]
 }|]
+
+
+test_file_json_2 = [i|[{
+  "subject_id": 0,
+  "name": "Sam",
+  "age": 25,
+  "heart_rate": [110, 98, 123],
+  "blood_pressure": [{"sys":95, "dia": 65}, {"sys":105, "dia": 72}, {"sys":98, "dia": 68}]
+}]|]
 
 
 test_file_json_1_expected = [
@@ -182,10 +207,78 @@ test_file_json_1_expected = [
     ]
   ]
 
-tests :: Maybe Config -> TestTree
-tests c = 
-  testGroup "Runtime" $
+
+
+testProcessFile :: String -> String -> IO ()
+testProcessFile inFile rowFunFile = do
+  settings <- withUtf8 $ try $ do
+    txtSettings <- BSL.readFile rowFunFile
+    case (decode txtSettings :: Maybe Settings) of
+      Just Settings{..} -> do
+        case compileSchema jsonSchema of
+          Left e -> do
+            throwM $ InternalError "Invalid schema"
+          Right validator ->
+            return (toS processFunction, validator, worksheet, fromMaybe 0 startFrom)
+      Nothing -> throwM $ InternalError "Invalid Settings file"
+
+  let 
+    (row_fun, validator, sheetName, startFrom) = 
+      case settings of
+        Left (_ :: SomeException) -> ("return row;", const [], Nothing, 0)
+        Right res -> res
+
+  _ <- quickjsTest $ do
+    _ <- eval_ $ "rowFun = function(row, header) { " <> row_fun <> " }"
+    res <- try $ processFile
+      Nothing 
+      Nothing
+      rowFun
+      validator
+      inFile
+      sheetName
+      fileType
+      Terminate
+      startFrom
+    case res of
+      Left (e :: RowError) -> liftIO $ withUtf8 $ writeFile (inFile <.> "out.json") $ show e
+      Right _ -> pure ()
+  return ()
+  where
+    rowFun row header = call "rowFun" [row, header]
+    fileType = fromMaybe TXT $ readFileType $ takeExtension inFile
+
+
+goldenTestsProcessFile :: IO TestTree
+goldenTestsProcessFile = do
+  inputFiles :: [String] <- getDirectoryContents "./test/Runtime/golden" >>= 
+    return . sortBy (\a b -> compare (takeExtension a ++ a) (takeExtension b ++ b)). filter (\f -> 
+         f /= "."
+      && f /= ".."
+      && not (strEndsWith f "out.json")
+      && takeExtension f /= ".gold"
+      && takeExtension f /= ".settings")
+
+  return $ testGroup "processFile golden tests"
+    [ goldenVsFile
+        (show fileType ++ " - " ++ (strCapitalize $ strReplace "_" " " $ takeBaseName inputFile)) -- test name
+        goldenFile -- golden file path
+        outputFile
+        (testProcessFile ("./test/Runtime/golden" </> inputFile) rowFunFile) -- action whose result is tested
+    | inputFile <- inputFiles
+    , let goldenFile = "./test/Runtime/golden" </> inputFile <.> "gold"
+          outputFile = "./test/Runtime/golden" </> inputFile <.> "out.json"
+          rowFunFile = "./test/Runtime/golden" </> inputFile <.> "settings"
+          fileType = fromMaybe TXT $ readFileType $ takeExtension inputFile
+    ]
+
+
+tests :: IO (Maybe Config -> TestTree)
+tests = do
+  goldenTests <- goldenTestsProcessFile
+  return $ \c -> testGroup "Runtime" $
     [ testCase "call loadLibrary and evaluate 'Utils.helloWorld();'" load_lib
+    , goldenTests
     ] ++ case c of 
       Just config -> 
         [ 
@@ -193,7 +286,9 @@ tests c =
             [ testCase "connect to the DB and set up tables" $ create_tables config
             , after AllSucceed "connect to the DB and set up tables" $
                 testCase "test the processFile function on a JSON file" $ 
-                  test_process_file config "./test_file_json_1.json" test_file_json_1 "return row;" test_file_json_1_expected
+                  testProcessFileWithDB config "./test_file_json_1.json" test_file_json_2 "return row;" test_file_json_1_expected
+              , testCase "test the processFile function on a JSON file 2, expecting the same result" $ 
+                  testProcessFileWithDB config "./test_file_json_2.json" test_file_json_1 "return row;" test_file_json_1_expected
             ]
         ]
       Nothing -> []

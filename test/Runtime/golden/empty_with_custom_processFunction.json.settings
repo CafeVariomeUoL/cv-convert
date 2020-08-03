@@ -1,0 +1,3 @@
+{
+  "processFunction": "return {...row, subject_id: 1};"
+}

@@ -2,6 +2,7 @@ module Main where
 
 import           Test.Tasty                   (defaultMainWithIngredients, defaultIngredients, includingOptions, askOption, testGroup)
 import           Test.Tasty.Options
+import           Test.Tasty.Golden            (DeleteOutputFile)
 import qualified Quickjs.Tests
 import qualified Runtime.Tests
 import qualified JSON.Utils.Tests
@@ -62,11 +63,16 @@ instance IsOption PostgresDBConfig where
 
 
 main :: IO ()
-main = defaultMainWithIngredients (optsIng : defaultIngredients) $
-  askOption $ \(PostgresDBConfig config) -> testGroup "Tests"
-    [ Quickjs.Tests.tests
-    , Runtime.Tests.tests config
-    , JSON.Utils.Tests.tests
-    ]
+main =  do
+  runtimeTests <- Runtime.Tests.tests
+  defaultMainWithIngredients (optsIng : defaultIngredients) $
+    askOption $ \(PostgresDBConfig config) -> testGroup "Tests"
+      [ Quickjs.Tests.tests
+      , runtimeTests config
+      , JSON.Utils.Tests.tests
+      ]
   where
-    optsIng = includingOptions [Option (Proxy :: Proxy PostgresDBConfig)]
+    optsIng = includingOptions [
+        Option (Proxy :: Proxy PostgresDBConfig)
+      , Option (Proxy :: Proxy DeleteOutputFile)
+      ]

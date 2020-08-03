@@ -32,9 +32,9 @@ for `src/JSON/Utils.hs` we will have a corresponding test file `test/JSON/Utils/
 ### Azure pipelines
 
 The test suite is compiled and run multi-threaded. However, QuickJS does not like being run in a multi-threaded setting. Due to the way Haskell threads are mapped to OS threads,
-a Haskell thread can be run on different threads throughout its lifetime. However, this is problematic for QuickJS, as it seems to be tied to the OS thread it was started on.
+a Haskell thread can be run on different OS threads throughout its lifetime. However, this is problematic for QuickJS, which seems to be tied to the OS thread it was started on.
 
-A fix for running locally involves running tests inside `quickjsTest` rather than the `quickjs` environment (defined in `src/Quickjs.hsc`). The difference between those two invlves running all the QuickJS IO actions wrapped in a `runInBoundThread`, which binds the current thread to the OS thread it was initially assigned. This works on my local machine, but fails on Azure pipleines with:
+A fix for running locally involves running tests inside `quickjsTest` rather than the `quickjs` environment (defined in `src/Quickjs.hsc`). The difference between those two involves running all the QuickJS IO actions wrapped in a `runInBoundThread`, which binds the Haskell thread to the OS thread it was created in. This works on my local machine, but fails on Azure pipleines with:
 
 ```
 lost signal due to full pipe: 11

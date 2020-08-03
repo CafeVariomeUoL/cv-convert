@@ -22,12 +22,28 @@ Afterwards, we can run
 
 ## Tests
 
-For tests, run `./stack-test-with-db`. The tests are located in the `test/` folder and mirror the structure of the code inside the `src` folder, i.e.
-for `src/JSON/Utils.hs` we will have a corresponding test file `test/JSON/Utils/Tests.hs`. All tests are collected and run via `test/Spec.hs`.
+For tests, run `./stack-test-with-db`. The script uses docker to create a temporary Postgres DB to run the test suite including DB tests. If you only want to run tests not involving the DB, you can do so via `stack test`.
 
-*If running Stack locally on a mac, I would recommend also running `stack test --docker --docker-image static-haskell-alpine-8.8.3`, as there might be subtle differences that might show up when testing on Linux. Since we use, Azure pipelines CI, which currently build on a Linux VM, the CI tests might fail even if the tests ran succesfully on your local mac.*
+The tests are located in the `test/` folder and mirror the structure of the code inside the `src` folder, i.e.
+for `src/JSON/Utils.hs` we will have a corresponding test file `test/JSON/Utils/Tests.hs`. All tests are collected and launched via `test/Spec.hs`.
+
+*If running Stack locally on a mac, I would recommend also running `./stack-test-docker-with-db`, as there might be subtle differences that might show on Linux.*
+
+### Azure pipelines
+
+The test suite is compiled and run multi-threaded. However, QuickJS does not like being run in a multi-threaded setting. Due to the way Haskell threads are mapped to OS threads,
+a Haskell thread can be run on different threads throughout its lifetime. However, this is problematic for QuickJS, as it seems to be tied to the OS thread it was started on.
+
+A fix for running locally involves running tests inside `quickjsTest` rather than the `quickjs` environment (defined in `src/Quickjs.hsc`). The difference between those two invlves running all the QuickJS IO actions wrapped in a `runInBoundThread`, which binds the current thread to the OS thread it was initially assigned. This works on my local machine, but fails on Azure pipleines with:
+
+```
+lost signal due to full pipe: 11
+forkOS_entry: interrupted
+```
+
+The only fix I've managed to get to working is to link the test executable as non-threaded and make all the tests run sequentially... 
+This should not be an issue unless we have a LOT of tests. This involves passing `--flag 'cv-convert:azure'` to stack, when compiling and running the tests on Azure.
 
 ## TODO
 
-Set up DB tests for stack test --docker?
 Set up automatic binary builds for tagged releases?

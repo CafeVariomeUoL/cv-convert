@@ -39,7 +39,7 @@ export default Utils;|]
 load_lib :: Assertion
 load_lib = do
     withUtf8 $ writeFile "./test-lib.js" lib_js
-    quickjs $ do
+    quickjsTest $ do
       loadLibrary "./test-lib.js"
       v <- eval "Utils.helloWorld();"
       liftIO $ v @?= Number 2

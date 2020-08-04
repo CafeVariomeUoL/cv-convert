@@ -7,6 +7,8 @@ import           Data.Aeson                   (Value, ToJSON(..), encode)
 import qualified Data.HashMap.Strict          as HM
 import qualified Data.Set                     as Set
 import           Data.String.Interpolate      (i)
+import           Data.String.Conv             (toS)
+
 import           Data.Shorten
 import           Data.List.NonEmpty           (toList)
 import           Data.List.Split              (splitOn)
@@ -23,11 +25,11 @@ compileSchema (Just s) = checkSchema (URISchemaMap HM.empty) (SchemaWithURI s No
 compileSchema Nothing = Right $ \_ -> []
 
 shortenLen :: Int
-shortenLen = 30
+shortenLen = 150
 
 
 trunc :: ToJSON a => a -> String
-trunc = shorten shortenLen . show . encode
+trunc = shorten shortenLen . toS . encode
 
 
 possiblyInline :: String -> [String] -> [String]
@@ -67,7 +69,10 @@ prettyValidatorFailure (FailureAdditionalItems   (AdditionalItemsObjectInvalid _
         ) $ toList _ListIndexValidatorFailure)
 prettyValidatorFailure (FailureMaxProperties     (MaxPropertiesInvalid (MaxProperties _MaxProperties) _MapTextValue)) = [ [i|The number of properties in "#{trunc _MapTextValue}" is greater than allowed: #{_MaxProperties}|] ]
 prettyValidatorFailure (FailureMinProperties     (MinPropertiesInvalid (MinProperties _MinProperties) _MapTextValue)) = [ [i|The number of properties in "#{trunc _MapTextValue}" is smaller than allowed: #{_MinProperties}|] ]
-prettyValidatorFailure (FailureRequired          (RequiredInvalid (Required _) _SetText _MapTextValue)) =  [ [i|The required properties "#{_SetText}" are not present in: #{trunc _MapTextValue}|] ]
+prettyValidatorFailure (FailureRequired          (RequiredInvalid (Required _) _SetText _MapTextValue)) =  
+    [  [i|The required properties "#{intercalate ", " $ map toS $ Set.toList _SetText}" are not present in:|]
+     , trunc _MapTextValue
+    ]
 prettyValidatorFailure (FailureDependencies      f@(DependenciesInvalid _)) = splitOn "\n" $ show f
 prettyValidatorFailure (FailurePropertiesRelated (PropertiesRelatedInvalid _prInvalidProperties _prInvalidPattern _prInvalidAdditional)) = 
     mkPrInvalidProperties ++ mkPrInvalidPattern ++ (mkPrInvalidAdditional _prInvalidAdditional)

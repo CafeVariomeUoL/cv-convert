@@ -1,0 +1,267 @@
+{
+  "startFrom": 69,
+  "processFunction": "const cols = row.data.split(\"\\t\");\n\nreturn {\n    CHROM: cols[0]\n  , POS: parseInt(cols[1])\n  , ID: cols[2]\n  , REF: cols[3]\n  , ALT: cols[4]\n  , QUAL: cols[5]\n  , FILTER: cols[6]\n  , INFO: Object.fromEntries(cols[7].split(\";\").map(e => e.split(\"=\")))\n  , FORMAT: cols[8].split(\":\")\n  ,\t\"130057481_TPOS_3243\": cols[9].split(\":\")\n  , subject_id: cols[2]\n  }",
+  "tsInterface": "export default interface Row {\n    CHROM:                 string;\n    POS:                   number;\n    ID:                    string;\n    REF:                   string;\n    ALT:                   string;\n    QUAL:                  string;\n    FILTER:                string;\n    INFO:                  Info;\n    FORMAT:                string[];\n    \"130057481_TPOS_3243\": string[];\n    subject_id:            string;\n}\n\nexport interface Info {\n    AF?:   string;\n    AO:   string;\n    DP:   string;\n    FAO:  string;\n    FDP:  string;\n    FDVR: string;\n    FR:   string;\n    FRO:  string;\n    FSAF: string;\n    FSAR: string;\n    FSRF: string;\n    FSRR: string;\n    FWDB: string;\n    FXX:  string;\n    HRUN: string;\n    LEN:  string;\n    MLLD: string;\n    PB:   string;\n    PBP:  string;\n    QD:   string;\n    RBI:  string;\n    REFB: string;\n    REVB: string;\n    RO:   string;\n    SAF:  string;\n    SAR:  string;\n    SRF:  string;\n    SRR:  string;\n    SSEN: string;\n    SSEP: string;\n    SSSB: string;\n    STB:  string;\n    STBP: string;\n    TYPE: string;\n    VARB: string;\n}\n",
+  "jsonSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "Row": {
+        "$ref": "#/definitions/default"
+      },
+      "Info": {
+        "title": "Info",
+        "type": "object",
+        "properties": {
+          "AF": {
+            "type": "string",
+            "title": "AF"
+          },
+          "AO": {
+            "type": "string",
+            "title": "AO"
+          },
+          "DP": {
+            "type": "string",
+            "title": "DP"
+          },
+          "FAO": {
+            "type": "string",
+            "title": "FAO"
+          },
+          "FDP": {
+            "type": "string",
+            "title": "FDP"
+          },
+          "FDVR": {
+            "type": "string",
+            "title": "FDVR"
+          },
+          "FR": {
+            "type": "string",
+            "title": "FR"
+          },
+          "FRO": {
+            "type": "string",
+            "title": "FRO"
+          },
+          "FSAF": {
+            "type": "string",
+            "title": "FSAF"
+          },
+          "FSAR": {
+            "type": "string",
+            "title": "FSAR"
+          },
+          "FSRF": {
+            "type": "string",
+            "title": "FSRF"
+          },
+          "FSRR": {
+            "type": "string",
+            "title": "FSRR"
+          },
+          "FWDB": {
+            "type": "string",
+            "title": "FWDB"
+          },
+          "FXX": {
+            "type": "string",
+            "title": "FXX"
+          },
+          "HRUN": {
+            "type": "string",
+            "title": "HRUN"
+          },
+          "LEN": {
+            "type": "string",
+            "title": "LEN"
+          },
+          "MLLD": {
+            "type": "string",
+            "title": "MLLD"
+          },
+          "PB": {
+            "type": "string",
+            "title": "PB"
+          },
+          "PBP": {
+            "type": "string",
+            "title": "PBP"
+          },
+          "QD": {
+            "type": "string",
+            "title": "QD"
+          },
+          "RBI": {
+            "type": "string",
+            "title": "RBI"
+          },
+          "REFB": {
+            "type": "string",
+            "title": "REFB"
+          },
+          "REVB": {
+            "type": "string",
+            "title": "REVB"
+          },
+          "RO": {
+            "type": "string",
+            "title": "RO"
+          },
+          "SAF": {
+            "type": "string",
+            "title": "SAF"
+          },
+          "SAR": {
+            "type": "string",
+            "title": "SAR"
+          },
+          "SRF": {
+            "type": "string",
+            "title": "SRF"
+          },
+          "SRR": {
+            "type": "string",
+            "title": "SRR"
+          },
+          "SSEN": {
+            "type": "string",
+            "title": "SSEN"
+          },
+          "SSEP": {
+            "type": "string",
+            "title": "SSEP"
+          },
+          "SSSB": {
+            "type": "string",
+            "title": "SSSB"
+          },
+          "STB": {
+            "type": "string",
+            "title": "STB"
+          },
+          "STBP": {
+            "type": "string",
+            "title": "STBP"
+          },
+          "TYPE": {
+            "type": "string",
+            "title": "TYPE"
+          },
+          "VARB": {
+            "type": "string",
+            "title": "VARB"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "AO",
+          "DP",
+          "FAO",
+          "FDP",
+          "FDVR",
+          "FR",
+          "FRO",
+          "FSAF",
+          "FSAR",
+          "FSRF",
+          "FSRR",
+          "FWDB",
+          "FXX",
+          "HRUN",
+          "LEN",
+          "MLLD",
+          "PB",
+          "PBP",
+          "QD",
+          "RBI",
+          "REFB",
+          "REVB",
+          "RO",
+          "SAF",
+          "SAR",
+          "SRF",
+          "SRR",
+          "SSEN",
+          "SSEP",
+          "SSSB",
+          "STB",
+          "STBP",
+          "TYPE",
+          "VARB"
+        ]
+      },
+      "default": {
+        "title": "default",
+        "type": "object",
+        "properties": {
+          "CHROM": {
+            "type": "string",
+            "title": "CHROM"
+          },
+          "POS": {
+            "type": "number",
+            "title": "POS"
+          },
+          "ID": {
+            "type": "string",
+            "title": "ID"
+          },
+          "REF": {
+            "type": "string",
+            "title": "REF"
+          },
+          "ALT": {
+            "type": "string",
+            "title": "ALT"
+          },
+          "QUAL": {
+            "type": "string",
+            "title": "QUAL"
+          },
+          "FILTER": {
+            "type": "string",
+            "title": "FILTER"
+          },
+          "INFO": {
+            "$ref": "#/definitions/Info",
+            "title": "INFO"
+          },
+          "FORMAT": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "FORMAT"
+          },
+          "130057481_TPOS_3243": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "130057481_TPOS_3243"
+          },
+          "subject_id": {
+            "type": "string",
+            "title": "subject_id"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "130057481_TPOS_3243",
+          "ALT",
+          "CHROM",
+          "FILTER",
+          "FORMAT",
+          "ID",
+          "INFO",
+          "POS",
+          "QUAL",
+          "REF",
+          "subject_id"
+        ]
+      }
+    },
+    "$ref": "#/definitions/default"
+  }
+}

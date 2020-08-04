@@ -255,6 +255,7 @@ goldenTestsProcessFile = do
     return . sortBy (\a b -> compare (takeExtension a ++ a) (takeExtension b ++ b)). filter (\f -> 
          f /= "."
       && f /= ".."
+      && f /= ".DS_Store"
       && not (strEndsWith f "out.json")
       && takeExtension f /= ".gold"
       && takeExtension f /= ".settings")
@@ -282,12 +283,13 @@ tests = do
     ] ++ case c of 
       Just config -> 
         [ 
-          testGroup "Runtime - DB" 
+          testGroup "processFile DB tests" 
             [ testCase "connect to the DB and set up tables" $ create_tables config
             , after AllSucceed "connect to the DB and set up tables" $
-                testCase "test the processFile function on a JSON file" $ 
+                testCase "test the processFile function on a JSON file 1" $ 
                   testProcessFileWithDB config "./test_file_json_1.json" test_file_json_2 "return row;" test_file_json_1_expected
-              , testCase "test the processFile function on a JSON file 2, expecting the same result" $ 
+            , after AllSucceed "test the processFile function on a JSON file 1" $
+                testCase "test the processFile function on a JSON file 2, expecting the same result" $ 
                   testProcessFileWithDB config "./test_file_json_2.json" test_file_json_1 "return row;" test_file_json_1_expected
             ]
         ]

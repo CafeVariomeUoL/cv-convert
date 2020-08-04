@@ -1,0 +1,77 @@
+{
+  "processFunction": "return row;",
+  "tsInterface": "export default interface Row {\n    subject_id:     number;\n    name:           string;\n    age:            number;\n    heart_rate:     number[];\n    blood_pressure: BloodPressure[];\n    i:              number;\n}\n\nexport interface BloodPressure {\n    sys: number;\n    dia: number;\n}\n",
+  "jsonSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "Row": {
+        "$ref": "#/definitions/default"
+      },
+      "BloodPressure": {
+        "title": "BloodPressure",
+        "type": "object",
+        "properties": {
+          "sys": {
+            "type": "number",
+            "title": "sys"
+          },
+          "dia": {
+            "type": "number",
+            "title": "dia"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "dia",
+          "sys"
+        ]
+      },
+      "default": {
+        "title": "default",
+        "type": "object",
+        "properties": {
+          "subject_id": {
+            "type": "number",
+            "title": "subject_id"
+          },
+          "name": {
+            "type": "string",
+            "title": "name"
+          },
+          "age": {
+            "type": "number",
+            "title": "age"
+          },
+          "heart_rate": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "title": "heart_rate"
+          },
+          "blood_pressure": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/BloodPressure"
+            },
+            "title": "blood_pressure"
+          },
+          "i": {
+            "type": "number",
+            "title": "i"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "age",
+          "blood_pressure",
+          "heart_rate",
+          "i",
+          "name",
+          "subject_id"
+        ]
+      }
+    },
+    "$ref": "#/definitions/default"
+  }
+}

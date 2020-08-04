@@ -1,4 +1,4 @@
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE QuasiQuotes, GeneralizedNewtypeDeriving #-}
 {-# OPTIONS_HADDOCK ignore-exports #-}
 
 {-|
@@ -63,7 +63,9 @@ readFileType :: FilePath -> Maybe FileType
 readFileType [] = Nothing
 readFileType s = decode $ toS $ "\"" ++ (map toLower $ tail s) ++ "\""
 
-newtype SheetName = SheetName {unSheetName :: Text} deriving (Generic, FromJSON, Show, Eq)
+newtype SheetName = SheetName {unSheetName :: Text} 
+  deriving stock   (Show, Eq, Generic)
+  deriving newtype FromJSON -- we need to derive this as newtype, so the JSON parsing treats SheetName same as just Text
 
 data Settings = Settings { 
   processFunction :: Text -- ^ A string containg the JS function which will be applied to the input

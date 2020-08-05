@@ -1,8 +1,8 @@
-{-# LANGUAGE ExistentialQuantification, StandaloneDeriving #-}
+{-# LANGUAGE ExistentialQuantification, UndecidableInstances, GeneralizedNewtypeDeriving #-}
 
 module Runtime.Error where
 
-import           Data.Aeson                   (Value(..), ToJSON(..), FromJSON(..), toJSON, genericParseJSON, genericToJSON,  defaultOptions, constructorTagModifier, camelTo2, tagSingleConstructors, sumEncoding, defaultTaggedObject, tagFieldName, GToJSON, Zero)
+import           Data.Aeson                   (Value(..), ToJSON(..), FromJSON(..), GToJSON, toJSON, genericParseJSON, genericToJSON,  defaultOptions, constructorTagModifier, camelTo2, tagSingleConstructors, sumEncoding, defaultTaggedObject, tagFieldName, Zero)
 import           Data.Typeable                (Typeable, cast)
 import           GHC.Generics
 import           Control.Monad.IO.Class       (MonadIO, liftIO)
@@ -32,92 +32,78 @@ instance FromJSON ErrorOpts where
 
 
 
+data SomeRuntimeException = forall e . (Exception e, ToJSON e) => SomeRuntimeException e 
 
-data RuntimeException = forall e . (Exception e, ToJSON e) => RuntimeException e 
+instance Show SomeRuntimeException where
+  show (SomeRuntimeException e) = show e
+instance ToJSON SomeRuntimeException where
+  toJSON (SomeRuntimeException e) = toJSON e
 
-instance Show RuntimeException where
-  show (RuntimeException e) = show e
-instance ToJSON RuntimeException where
-  toJSON (RuntimeException e) = toJSON e
-
-instance Exception RuntimeException
-
+instance Exception SomeRuntimeException
 
 runtimeExceptionToException :: (Exception e, ToJSON e) => e -> SomeException
-runtimeExceptionToException = toException . RuntimeException
+runtimeExceptionToException = toException . SomeRuntimeException
 
 runtimeExceptionFromException :: Exception e => SomeException -> Maybe e
 runtimeExceptionFromException x = do
-  RuntimeException a <- fromException x
+  SomeRuntimeException a <- fromException x
   cast a
 
 
-genericExceptionToJSON :: (Generic a, GToJSON Zero (Rep a)) => a -> Value
-genericExceptionToJSON = genericToJSON defaultOptions
-  { tagSingleConstructors = True
-  , sumEncoding = defaultTaggedObject{ tagFieldName = "error_type"}
-  }
+newtype RuntimeException e = RuntimeException e 
+  deriving Generic
+  deriving newtype Show
+
+instance (Generic a, GToJSON Zero (Rep a)) => ToJSON (RuntimeException a) where
+  toJSON (RuntimeException a) = genericToJSON opts a
+    where
+      opts = defaultOptions { tagSingleConstructors = True
+                            , sumEncoding = defaultTaggedObject{ tagFieldName = "error_type"}
+                            }
+
+instance (Show e, Typeable e, Generic e, GToJSON Zero (Rep e)) => Exception (RuntimeException e)
+  where
+    toException = runtimeExceptionToException
+    fromException = runtimeExceptionFromException
 
 
-
-data SubjectIDNotFound = SubjectIDNotFound deriving (Generic, Typeable)
+data SubjectIDNotFound = SubjectIDNotFound 
+  deriving (Generic, Typeable)
+  deriving ToJSON via (RuntimeException SubjectIDNotFound)
+  deriving Exception via (RuntimeException SubjectIDNotFound)
 
 instance Show SubjectIDNotFound where
   show _ = "subject_id is required"
 
-instance ToJSON SubjectIDNotFound where
-  toJSON = genericExceptionToJSON
 
-instance Exception SubjectIDNotFound where
-  toException   = runtimeExceptionToException
-  fromException = runtimeExceptionFromException
-
-
-
-data SheetNotFound = SheetNotFound {name :: T.Text} deriving (Generic, Typeable)
+data SheetNotFound = SheetNotFound {name :: T.Text} 
+  deriving (Generic, Typeable)
+  deriving ToJSON via (RuntimeException SheetNotFound)
+  deriving Exception via (RuntimeException SheetNotFound)
 
 instance Show SheetNotFound where
   show SheetNotFound{..} = "Sheet '" ++ toS name ++ "' does not exist in the current file."
 
-instance ToJSON SheetNotFound where
-  toJSON = genericExceptionToJSON
 
-instance Exception SheetNotFound where
-  toException   = runtimeExceptionToException
-  fromException = runtimeExceptionFromException
-
-
-data CSVParseError = CSVParseError {message :: String} deriving (Generic, Typeable)
+data CSVParseError = CSVParseError {message :: String} 
+  deriving (Generic, Typeable)
+  deriving ToJSON via (RuntimeException CSVParseError)
+  deriving Exception via (RuntimeException CSVParseError)
 
 instance Show CSVParseError where
   show CSVParseError{..} = message
 
-instance ToJSON CSVParseError where
-  toJSON = genericExceptionToJSON
 
-instance Exception CSVParseError where
-  toException   = runtimeExceptionToException
-  fromException = runtimeExceptionFromException
-
-
-
-data FileIDNotFound = FileIDNotFound {file :: String} deriving (Generic, Typeable)
+data FileIDNotFound = FileIDNotFound {file :: String} 
+  deriving (Generic, Typeable)
+  deriving ToJSON via (RuntimeException FileIDNotFound)
+  deriving Exception via (RuntimeException FileIDNotFound)
 
 instance Show FileIDNotFound where
   show FileIDNotFound {..} = "File ID for '" ++ (takeFileName file) ++ "' could not be found."
 
-instance ToJSON FileIDNotFound where
-  toJSON = genericExceptionToJSON
-
-instance Exception FileIDNotFound where
-  toException   = runtimeExceptionToException
-  fromException = runtimeExceptionFromException
-
-
-
 
 data RowError = forall e . (Exception e, ToJSON e) => RowError {row :: Int, _error :: e} 
-
 
 instance Show RowError where
   show RowError{..} = "Error on line " ++ show row ++ ": " ++ show _error
@@ -131,9 +117,8 @@ instance Exception RowError where
 
 
 
-
 handleError :: (MonadThrow m, MonadIO m) =>
-  ErrorOpts -> Maybe Handle -> Maybe (Connection, SourceID, FileID) -> Int -> RuntimeException -> m ()
+  ErrorOpts -> Maybe Handle -> Maybe (Connection, SourceID, FileID) -> Int -> SomeRuntimeException -> m ()
 handleError Terminate _ _ lineNo err = 
   throwM $ RowError lineNo err
 handleError LogToConsole _ _ lineNo err = 
@@ -145,7 +130,3 @@ handleError LogToDb _ (Just (con, srcID, fileID)) lineNo err = liftIO $ do
   insertError srcID fileID ("Error in row " ++ show lineNo ++ ": " ++ show err) con 
 handleError LogToDb _ Nothing lineNo err = 
   throwM $ RowError lineNo err
-
-
-
-

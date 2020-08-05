@@ -157,7 +157,7 @@ convertRow i row header rowFun validator outputHandle onError logFile = do {
       when (i > 0) $ BSL.hPutStr outputFile " , "
       BSL.hPutStr outputFile $ encodePretty res
       return Nothing ;
-} `catch` (\(e::RuntimeException) -> handleError onError logFile maybeDBConn i e >> return Nothing)
+} `catch` (\(e::SomeRuntimeException) -> handleError onError logFile maybeDBConn i e >> return Nothing)
 
   where
     maybeDBConn = case outputHandle of

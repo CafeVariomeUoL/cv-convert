@@ -246,18 +246,13 @@ deriving instance ToJSON Data.Text.Encoding.Error.UnicodeException
 
 data ValidatorFailureError = ValidatorFailureError {
   errors :: [ValidatorFailure]
-} deriving Generic
+} 
+  deriving Generic
+  deriving ToJSON via (RuntimeException ValidatorFailureError)
+  deriving Exception via (RuntimeException ValidatorFailureError)
 
 instance Show ValidatorFailureError where
     show ValidatorFailureError{..} = intercalate "\n" $ map pValidatorFailure errors
-
-instance Exception ValidatorFailureError where
-    toException = runtimeExceptionToException
-    fromException = runtimeExceptionFromException
-
-
-instance ToJSON ValidatorFailureError where
-  toJSON = genericExceptionToJSON
 
 
 

@@ -303,14 +303,14 @@ jsObjectToJSON ctxPtr obj = do
     let flags = toCType JSGPNStringMask .|. toCType JSGPNSymbolMask .|. toCType JSGPNEnumOnly
     properties <- liftIO $ malloc
     plen <- jsGetOwnPropertyNames ctxPtr obj properties flags 
-      `catch` (\(e::JSRuntimeException) -> do
+      `catch` (\(e::SomeJSRuntimeException) -> do
         liftIO $ free properties
         throwM e
       )
     objPtr <- liftIO $ malloc
     liftIO $ poke objPtr obj
 
-    res <- collectVals properties objPtr 0 plen `catch` (\(e::JSRuntimeException) -> do
+    res <- collectVals properties objPtr 0 plen `catch` (\(e::SomeJSRuntimeException) -> do
         liftIO $ free objPtr
         throwM e
       )
@@ -431,13 +431,6 @@ printing to console/modifying state.
 -}
 eval_ :: (MonadThrow m, MonadReader JSContextPtr m, MonadIO m) => ByteString -> m ()
 eval_ = evalAs_ Global
-
--- toJSValue :: Aeson.ToJSON a => (MonadCatch m, MonadReader JSContextPtr m, MonadIO m) => a -> m JSValue
--- toJSValue v = do
---   ctx <- ask
---   val <- jsonToJSValue ctx (Aeson.toJSON v)
---   checkIsException ctx val `catch` (\(e:: JSRuntimeException) -> do {freeJSValue val ; throwM e})
---   return val
 
 
 fromJSValue_ :: (MonadCatch m, MonadReader JSContextPtr m, MonadIO m) => JSValue -> m Value

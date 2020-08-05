@@ -103,7 +103,7 @@ library
   default-language:
     Haskell2010
   default-extensions:
-    DeriveGeneric, DeriveAnyClass, DerivingStrategies, RecordWildCards, FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, OverloadedStrings, ScopedTypeVariables
+    DeriveGeneric, DeriveAnyClass, DerivingStrategies, DerivingVia, RecordWildCards, FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, OverloadedStrings, ScopedTypeVariables
   Include-dirs: quickjs
   -- Order matters for dynamic linking, see GHC#12152.
   -- To make both `cabal repl` and `stack ghci` work, we have to

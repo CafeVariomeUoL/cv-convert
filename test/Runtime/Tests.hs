@@ -242,6 +242,8 @@ testProcessFile inFile rowFunFile = do
       startFrom
     case res of
       Left (e :: RowError) -> liftIO $ withUtf8 $ writeFile (inFile <.> "out.json") $ show e
+      -- in case we want to output RowError as JSON?
+      -- Left (e :: RowError) -> liftIO $ withUtf8 $ BSL.writeFile (inFile <.> "out.json") $ encode e
       Right _ -> pure ()
   return ()
   where

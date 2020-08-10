@@ -38,21 +38,12 @@ import           DB
 
 
 
-test_lib_js = [i|let Utils = {
-  helloWorld: function() {return 2;}
-}
-export default Utils;|]
-
 
 load_lib :: Assertion
-load_lib = do
-    withUtf8 $ writeFile "./test_lib.js" test_lib_js
-    quickjsTest $ do
-      loadLibrary "./test_lib.js"
-      v <- eval "Utils.helloWorld();"
-      liftIO $ v @?= Number 2
-    removeFile "./test_lib.js"
-
+load_lib = quickjsTest $ do
+  loadLibrary $ Inline "Lib.helloWorld = function() {return 2;}"
+  v <- eval "Lib.helloWorld();"
+  liftIO $ v @?= Number 2
 
 
 [yesh1|
@@ -156,15 +147,12 @@ testProcessFileWithDB config file file_contents row_fun expected = do
   r <- quickjsTest $ do
     _ <- eval_ $ "rowFun = function(row, header) { " <> row_fun <> " }"
     processFile
-      (Just config) 
-      (Just $ SourceID 1) 
+      (Just (config, SourceID 1) )
       rowFun
       (const [])
       file
-      Nothing
-      JSON
-      LogToDb
-      0
+      (JSON ())
+      (LogToDb ())
   bracket (connect config) (\con -> commit con >> disconnect con) $ \con -> do
     res <- selectAllFromEAVS_JSONB (takeFileName file) con
     res @?= expected
@@ -219,27 +207,25 @@ testProcessFile inFile rowFunFile = do
           Left e -> do
             throwM $ InternalError "Invalid schema"
           Right validator ->
-            return (toS processFunction, validator, worksheet, fromMaybe 0 startFrom)
+            return (toS processFunction, libraryFunctions, validator, worksheet, fromMaybe 0 startFrom)
       Nothing -> throwM $ InternalError "Invalid Settings file"
 
   let 
-    (row_fun, validator, sheetName, startFrom) = 
+    (row_fun, libraryFunctions, validator, sheetName, startFrom) = 
       case settings of
-        Left (_ :: SomeException) -> ("return row;", const [], Nothing, 0)
+        Left (_ :: SomeException) -> ("return row;", Nothing, const [], Nothing, 0)
         Right res -> res
 
   _ <- quickjsTest $ do
+    mapM_ loadLibrary libraryFunctions
     _ <- eval_ $ "rowFun = function(row, header) { " <> row_fun <> " }"
     res <- try $ processFile
       Nothing 
-      Nothing
       rowFun
       validator
       inFile
-      sheetName
-      fileType
+      (addOptsToFileType startFrom () () sheetName fileType)      
       Terminate
-      startFrom
     case res of
       Left (e :: RowError) -> liftIO $ withUtf8 $ writeFile (inFile <.> "out.json") $ show e
       -- in case we want to output RowError as JSON?
@@ -248,7 +234,7 @@ testProcessFile inFile rowFunFile = do
   return ()
   where
     rowFun row header = call "rowFun" [row, header]
-    fileType = fromMaybe TXT $ readFileType $ takeExtension inFile
+    fileType = fromMaybe (TXT ()) $ readFileType $ takeExtension inFile
 
 
 goldenTestsProcessFile :: IO TestTree
@@ -272,7 +258,7 @@ goldenTestsProcessFile = do
     , let goldenFile = "./test/Runtime/golden" </> inputFile <.> "gold"
           outputFile = "./test/Runtime/golden" </> inputFile <.> "out.json"
           rowFunFile = "./test/Runtime/golden" </> inputFile <.> "settings"
-          fileType = fromMaybe TXT $ readFileType $ takeExtension inputFile
+          fileType = fromMaybe (TXT ()) $ readFileType $ takeExtension inputFile
     ]
 
 
@@ -280,7 +266,7 @@ tests :: IO (Maybe Config -> TestTree)
 tests = do
   goldenTests <- goldenTestsProcessFile
   return $ \c -> testGroup "Runtime" $
-    [ testCase "call loadLibrary and evaluate 'Utils.helloWorld();'" load_lib
+    [ testCase "call loadLibrary and evaluate 'Lib.helloWorld();'" load_lib
     , goldenTests
     ] ++ case c of 
       Just config -> 

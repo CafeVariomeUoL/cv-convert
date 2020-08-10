@@ -1,0 +1,4 @@
+{
+  "processFunction": "return Lib.helloWorld(row);",
+  "libraryFunctions": "Lib.helloWorld = row => {return {...row, hello: \"world\"}};"
+}

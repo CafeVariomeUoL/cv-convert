@@ -1,15 +1,14 @@
 {-# LANGUAGE ExistentialQuantification, DuplicateRecordFields, GeneralizedNewtypeDeriving #-}
 
 module Quickjs.Error where
-import           Control.Exception (Exception(..), SomeException)
+import           Control.Exception   (Exception(..), SomeException)
 import           Data.Typeable       (cast)
 import           Data.Text           (Text)
 import           Data.String.Conv    (toS)
 import           Type.Reflection     (Typeable)
 import           GHC.Generics
 import           Foreign.C.Types
-import           Data.Aeson          (Value(..), ToJSON(..))
-import qualified Data.HashMap.Strict as HM
+import           Data.Aeson          (ToJSON(..))
 
 import           Quickjs.Types
 import           Runtime.Error

@@ -85,24 +85,24 @@ class FromCType ty cty where
   fromCType :: cty -> Maybe ty
 
 
-data JSTagEnum = JSTagFirst
-                | JSTagBigDecimal 
-                | JSTagBigInt     
-                | JSTagBigFloat   
-                | JSTagSymbol      
-                | JSTagString      
-                | JSTagModule      
-                | JSTagFunctionBytecode 
+data JSTagEnum =  JSTagFirst
+                | JSTagBigDecimal
+                | JSTagBigInt
+                | JSTagBigFloat
+                | JSTagSymbol
+                | JSTagString
+                | JSTagModule
+                | JSTagFunctionBytecode
                 | JSTagObject
-                | JSTagInt         
-                | JSTagBool        
-                | JSTagNull        
-                | JSTagUndefined   
-                | JSTagUninitialized 
-                | JSTagCatchOffset 
-                | JSTagException   
+                | JSTagInt
+                | JSTagBool
+                | JSTagNull
+                | JSTagUndefined
+                | JSTagUninitialized
+                | JSTagCatchOffset
+                | JSTagException
                 | JSTagFloat64
-  deriving (Show, Generic, ToJSON)
+  deriving (Show, Eq, Generic, ToJSON)
   
 instance Num a => ToCType JSTagEnum a where
   toCType JSTagFirst            = -11
@@ -146,6 +146,7 @@ instance (Eq a, Num a) => FromCType JSTagEnum a where
 data JSTypeEnum = JSTypeFromTag JSTagEnum
                 | JSIsNumber
                 | JSIsArray
+                | JSIsDate
                 | JSIsError
   deriving Show
 
@@ -153,6 +154,7 @@ instance ToJSON JSTypeEnum where
   toJSON (JSTypeFromTag t) = toJSON t
   toJSON JSIsNumber = toJSON ("JSIsNumber" :: String)
   toJSON JSIsArray = toJSON ("JSIsArray" :: String)
+  toJSON JSIsDate = toJSON ("JSIsDate" :: String)
   toJSON JSIsError = toJSON ("JSIsError" :: String)
 
 

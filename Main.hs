@@ -8,6 +8,7 @@ import           Data.Maybe                   (fromMaybe)
 import qualified Data.ByteString.Lazy         as BS
 import           Control.Monad.IO.Class       (liftIO)
 import           Control.Monad                (when)
+import           Control.Monad.Zip            (mzip)
 import           System.FilePath.Posix        (takeExtension)
 import           System.Directory             (doesFileExist)
 import           LoadEnv                      (loadEnvFromAbsolute)
@@ -30,7 +31,7 @@ data Options w = Options
   , db        :: w ::: Bool           <?> "Output data to DB"
   -- , output   :: w ::: Maybe FilePath <?> "Output file"
   -- , lib       :: w ::: Maybe FilePath <?> "Path to JS lib"
-  , env       :: w ::: Maybe FilePath <?> "Path to .env file used for DB connection (must include host, port, dbname, user, password) and other settings such as the path to the js lib."
+  , env       :: w ::: Maybe FilePath <?> "Path to .env file used for the DB connection (must include host, port, dbname, user, password)"
   , source_id :: w ::: Maybe SourceID <?> "Souce ID used for DB insert"
   }
   deriving (Generic)
@@ -77,23 +78,19 @@ main = withUtf8 $ do
           putStrLn "Invalid schema"
           putStrLn $ show e
         Right validator ->
-          let fileType = fromMaybe (fromMaybe TXT $ readFileType $ takeExtension input) openAs in 
+          let fileType = fromMaybe (fromMaybe (TXT ()) $ readFileType $ takeExtension input) openAs in 
           quickjs $ do
-            lib <- liftIO $ lookupEnv "jslib"
-            loadLibrary (fromMaybe "./lib.js" lib)
-            liftIO $ print ("loaded lib at: " ++ (fromMaybe "./lib.js" lib) :: String)
+            mapM_ loadLibrary libraryFunctions
             _ <- eval_ $ "rowFun = (row, header) => { " <> toS processFunction <> " }"
             
             processFile 
-              dbConnInfo 
-              source_id 
+              (mzip dbConnInfo source_id)
               rowFun 
               validator 
               input 
-              worksheet
-              fileType 
+              (addOptsToFileType (fromMaybe 0 startFrom) () () worksheet fileType)
               (onErrorBehaviour dbConnInfo onError) 
-              (fromMaybe 0 startFrom)
+              
     Nothing -> putStrLn "Invalid Settings file"
 
   where
@@ -104,7 +101,7 @@ main = withUtf8 $ do
     -- otherwise we log to console 
     onErrorBehaviour dbConnInfo onError = case (dbConnInfo, onError) of
       (_, Just e) -> e
-      (Just _, Nothing) -> LogToDb
+      (Just _, Nothing) -> LogToDb ()
       (Nothing, Nothing) -> LogToConsole
    
 

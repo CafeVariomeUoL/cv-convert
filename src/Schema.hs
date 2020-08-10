@@ -118,7 +118,7 @@ prettyValidatorFailure (FailureRef   f@(RefLoop _ _ _)) = splitOn "\n" $ show f
 prettyValidatorFailure (FailureRef   (RefInvalid _Text _Value _ListValidatorFailure)) = 
     [ [i|Failed to validate against the schema '#{_Text}'.|] ] ++
     (concat $ map (prettyValidatorFailure) $ toList _ListValidatorFailure)
-prettyValidatorFailure (FailureEnum  (EnumInvalid (EnumValidator _ListValue) _Value)) = [ [i|The value #{encode _Value} must be one of #{_ListValue}|] ]
+prettyValidatorFailure (FailureEnum  (EnumInvalid (EnumValidator _ListValue) _Value)) = [ [i|The value #{encode _Value} must be one of #{intercalate "|" $ map (toS . encode) $ toList _ListValue}|] ]
 prettyValidatorFailure (FailureType  (TypeValidatorInvalid (TypeValidatorString _SchemaType) _Value)) = [ [i|Expected #{encode _Value} to be of type #{prettySchemaType _SchemaType}|] ]
 prettyValidatorFailure (FailureType  (TypeValidatorInvalid (TypeValidatorArray _SetSchemaType) _Value)) = [ [i|Expected #{encode _Value} to be of type #{intercalate "|" $ map prettySchemaType $ Set.toList _SetSchemaType}|] ]
 prettyValidatorFailure (FailureAllOf (AllOfInvalid _ListIndexValidatorFailure)) = 

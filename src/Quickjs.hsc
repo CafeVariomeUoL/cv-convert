@@ -24,13 +24,14 @@ import           Control.Monad               (when, forM_)
 import           Control.Monad.Reader        (MonadReader, runReaderT, ask)
 import           Control.Monad.Trans.Reader  (ReaderT)
 import           Control.Monad.IO.Class      (MonadIO, liftIO)
-import           Data.Aeson                  (Value(..), encode)
+import           Data.Aeson                  (Value(..), encode, toJSON)
 import qualified Data.Aeson                  as Aeson
 import           Data.Scientific             (fromFloatDigits, toRealFloat, toBoundedInteger, isInteger)
 import           Data.Text                   (Text)
 import           Data.Vector                 (fromList, imapM_)
 import           Data.HashMap.Strict         (HashMap, empty, insert, toList)
 import           Data.String.Conv            (toS)
+import           Data.Time.Clock.POSIX       (posixSecondsToUTCTime)
 import           Control.Concurrent          (rtsSupportsBoundThreads, runInBoundThread)
 import           Control.Monad.IO.Unlift     (MonadUnliftIO(..), UnliftIO(..), askUnliftIO)
 
@@ -79,26 +80,46 @@ jsIs_ val fun = do
   b <- liftIO $ with val fun
   return $ b == 1
 
-jsIsNumber :: MonadIO m => JSValue -> m Bool
-jsIsNumber val = jsIs_ val $ \valPtr -> [C.block| int { return JS_IsNumber(*$(JSValueConst *valPtr)); } |]
+-- jsIsNumber :: MonadIO m => JSValue -> m Bool
+-- jsIsNumber val = jsIs_ val $ \valPtr -> [C.block| int { return JS_IsNumber(*$(JSValueConst *valPtr)); } |]
 
 jsIsArray :: MonadIO m => JSContextPtr -> JSValue -> m Bool
 jsIsArray ctxPtr val = jsIs_ val $ \valPtr -> [C.block| int { return JS_IsArray($(JSContext *ctxPtr), *$(JSValueConst *valPtr)); } |]
 
+jsIsDate :: MonadIO m => JSContextPtr -> JSValue -> m Bool
+jsIsDate ctxPtr val = do
+  globalObject <- liftIO $ C.withPtr_ $ \globalObjectPtr ->
+      [C.block| void { *$(JSValue *globalObjectPtr) = JS_GetGlobalObject($(JSContext *ctxPtr)); } |]
+  dateConstructor <- jsGetPropertyStr ctxPtr globalObject "Date"
+  liftIO $ do
+    jsFreeValue ctxPtr globalObject
+    res <- with val $ \valPtr -> with dateConstructor $ \dateCPtr -> 
+      [C.block| int { return JS_IsInstanceOf($(JSContext *ctxPtr), *$(JSValueConst *valPtr), *$(JSValueConst *dateCPtr)); } |]
+    jsFreeValue ctxPtr dateConstructor
+    return $ res > 0
 
-jsIsTryAll_ :: MonadThrow m =>
-  JSValue -> [JSValue -> m Bool] -> [JSTypeEnum] -> m JSTypeEnum
-jsIsTryAll_ jsval [] _ = case fromCType $ tag jsval of
-  Just t -> return $ JSTypeFromTag t
-  Nothing -> throwM $ UnknownJSTag (tag jsval)
-jsIsTryAll_ jsval (f:funs)(l:lbls) = do
+
+jsIsTryAll :: MonadThrow m =>
+  JSValue -> [JSValue -> m Bool] -> [JSTypeEnum] -> JSTypeEnum -> m JSTypeEnum
+jsIsTryAll _ [] _ def = return def
+jsIsTryAll jsval (f:funs)(l:lbls) def = do
   b <- f jsval
-  if b then return l else jsIsTryAll_ jsval funs lbls
-jsIsTryAll_ _ _ _ = throwM $ InternalError $ "jsIsTryAll_ unreachable case"
+  if b then return l else jsIsTryAll jsval funs lbls def
+jsIsTryAll _ _ _ _ = throwM $ InternalError $ "jsIsTryAll_ unreachable case"
 
 
 jsIs :: (MonadIO m, MonadThrow m) => JSContextPtr -> JSValue -> m JSTypeEnum
-jsIs ctx jsval = jsIsTryAll_ jsval [jsIsNumber, jsIsArray ctx] [JSIsNumber, JSIsArray]
+jsIs ctx jsval = case fromCType $ tag jsval of
+  Just JSTagObject -> 
+    jsIsTryAll jsval [jsIsArray ctx, jsIsDate ctx] [JSIsArray, JSIsDate] (JSTypeFromTag JSTagObject)
+  Just t | t == JSTagBigDecimal || 
+           t == JSTagBigInt ||
+           t == JSTagBigFloat ||
+           t == JSTagInt || 
+           t == JSTagFloat64 -> return JSIsNumber
+         | otherwise -> return $ JSTypeFromTag t
+  Nothing -> throwM $ UnknownJSTag (tag jsval)
+ 
 
 
 jsNullValue :: JSValue
@@ -263,6 +284,17 @@ jsToJSON ctx jsval = do
         return len'
       vs <- jsArrayToJSON ctx jsval 0 (fromIntegral len)
       return $ Array $ fromList vs
+    JSIsDate -> do
+      getter <- jsGetPropertyStr ctx jsval "getTime" 
+
+      timestampRaw <- liftIO $ C.withPtr_ $ \res -> with getter $ \getterPtr -> with jsval $ \jsvalPtr -> 
+        [C.block| void { *$(JSValue *res) = JS_Call($(JSContext *ctx), *$(JSValueConst *getterPtr), *$(JSValueConst *jsvalPtr), 0, NULL); } |]
+
+      timestamp <- jsToFloat64 ctx timestampRaw
+      liftIO $ do
+        jsFreeValue ctx getter
+        jsFreeValue ctx timestampRaw
+      return $ toJSON $ posixSecondsToUTCTime $ realToFrac $ timestamp / 1000
     JSTypeFromTag JSTagObject -> do
       o <- jsObjectToJSON ctx jsval
       return $ Object o 
@@ -286,6 +318,9 @@ jsArrayToJSON ctxPtr jsval index len =
     vs <- jsArrayToJSON ctxPtr jsval (index+1) len
     return $ v:vs
   else return []
+
+
+
 
 
 
@@ -469,8 +504,7 @@ callRaw ctxPtr funName args = do
     globalObject <- liftIO $ C.withPtr_ $ \globalObjectPtr ->
       [C.block| void { *$(JSValue *globalObjectPtr) = JS_GetGlobalObject($(JSContext *ctxPtr)); } |]
 
-    fun <- liftIO $ C.withPtr_ $ \funPtr -> useAsCString funName $ \cfunName -> with globalObject $ \globalObjectPtr ->
-      [C.block| void { *$(JSValue *funPtr) = JS_GetPropertyStr($(JSContext *ctxPtr), *$(JSValueConst *globalObjectPtr), $(const char *cfunName)); } |]
+    fun <- jsGetPropertyStr ctxPtr globalObject funName
 
     liftIO $ jsFreeValue ctxPtr globalObject
 

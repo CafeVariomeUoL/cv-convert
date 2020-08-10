@@ -139,6 +139,14 @@ forkOS_entry: interrupted
 The only fix I've managed to get to working is to link the test executable as non-threaded and make all the tests run sequentially... 
 This should not be an issue unless we have a **LOT** of tests. The fix involves passing `--flag 'cv-convert:azure'` to Stack, when compiling and running the tests on Azure.
 
+## Releases
+
+At the moment, we upload compiled binaries to github manually. Might change this in the future if it's worth the reduced hassle. To build and copy the binary to an output folder locally, run
+
+```bash
+stack install --local-bin-path=<path_to_output_folder>
+```
+
 ## TODO
 
 Set up automatic binary builds for tagged releases?

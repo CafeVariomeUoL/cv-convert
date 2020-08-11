@@ -1,0 +1,8 @@
+cradle:
+  stack:
+    - path: "./src"
+      component: "cv-convert:lib"
+    - path: "./Main.hs"
+      component: "cv-convert:exe:cv-convert"
+    - path: "./test"
+      component: "cv-convert:test:cv-convert-test"

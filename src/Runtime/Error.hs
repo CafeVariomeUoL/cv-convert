@@ -1,4 +1,5 @@
 {-# LANGUAGE ExistentialQuantification, UndecidableInstances, GeneralizedNewtypeDeriving #-}
+{-# OPTIONS_GHC -fno-warn-incomplete-record-updates #-}
 
 module Runtime.Error where
 

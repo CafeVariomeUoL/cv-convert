@@ -31,5 +31,5 @@ Cleanup() {
 echo "Running 'stack test'..."
 trap Cleanup EXIT
 
-stack test --ta "--postgres-db-config postgresql://postgres:mysecretpassword@localhost:$port/postgres" --ta '--delete-output onpass'
+stack test --flag 'cv-convert:azure' --ta "--postgres-db-config postgresql://postgres:mysecretpassword@localhost:$port/postgres" --ta '--delete-output onpass'
 

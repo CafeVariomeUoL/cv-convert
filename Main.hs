@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators, DataKinds, StandaloneDeriving, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE CPP, TypeOperators, DataKinds, StandaloneDeriving, GeneralizedNewtypeDeriving #-}
 
 import           Options.Generic
 import           System.IO                    (openFile, IOMode(..))
@@ -16,7 +16,8 @@ import           System.Environment           (lookupEnv)
 import           Database.HDBC.PostgreSQL.Pure(Config(..), Address(..))
 import           Data.Default.Class           (def)
 import           Data.String.Conv             (toS)
-
+import           Paths_cv_convert             (version)
+import           Data.Version                 (showVersion)
 
 import           Runtime
 import           Runtime.Error
@@ -44,9 +45,20 @@ instance ParseRecord (Options Wrapped) where
 deriving instance Show (Options Unwrapped)
 
 
+color :: String -> String
+#if defined(mingw32_HOST_OS)
+color s = s
+#else
+color s = "\ESC[032m" ++ s ++ "\ESC[0m"
+#endif
 
 main :: IO ()
 main = withUtf8 $ do
+  putStrLn $ color $ 
+    "                                                _   \n                                               | |  \n  _____   ________ ___ ___  _ ____   _____ _ __| |_ \n / __\\ \\ / /______/ __/ _ \\| '_ \\ \\ / / _ \\ '__| __|\n| (__ \\ V /      | (_| (_) | | | \\ V /  __/ |  | |_ \n \\___| \\_/        \\___\\___/|_| |_|\\_/ \\___|_|   \\__| v" ++
+    showVersion version ++
+    "\n                                                    \n                                                    "
+    
   Options{..} <- unwrapRecord "CV convert CLI"
   let envPath = fromMaybe "./env" env
   envExists <- doesFileExist envPath

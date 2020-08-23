@@ -116,6 +116,17 @@ packages:
       sha256: a8da944ee34077134460b91ccb588cadd598d3750bf6649e485cbd3835509e8f
   original:
     hackage: tasty-golden-2.3.4
+- completed:
+    name: quickjs-hs
+    version: '0.1'
+    git: https://github.com/goodlyrottenapple/quickjs-hs.git
+    pantry-tree:
+      size: 4782
+      sha256: 88276738a3c4379ad66db5d7ee032cf00c134e640ebd623e7cee8fd914592dcb
+    commit: 9b64ce22acd9b938f5710af0a61cf7eebf1a28c8
+  original:
+    git: https://github.com/goodlyrottenapple/quickjs-hs.git
+    commit: 9b64ce22acd9b938f5710af0a61cf7eebf1a28c8
 snapshots:
 - completed:
     size: 496111

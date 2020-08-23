@@ -3,7 +3,6 @@ module Main where
 import           Test.Tasty                   (defaultMainWithIngredients, defaultIngredients, includingOptions, askOption, testGroup)
 import           Test.Tasty.Options
 import           Test.Tasty.Golden            (DeleteOutputFile)
-import qualified Quickjs.Tests
 import qualified Runtime.Tests
 import qualified JSON.Utils.Tests
 import           Database.HDBC.PostgreSQL.Pure(Config(..), Address(..))
@@ -67,8 +66,7 @@ main =  do
   runtimeTests <- Runtime.Tests.tests
   defaultMainWithIngredients (optsIng : defaultIngredients) $
     askOption $ \(PostgresDBConfig config) -> testGroup "Tests"
-      [ Quickjs.Tests.tests
-      , runtimeTests config
+      [ runtimeTests config
       , JSON.Utils.Tests.tests
       ]
   where

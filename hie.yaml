@@ -1,5 +1,7 @@
 cradle:
   stack:
+    - path: .stack-work/
+      component: "cv-convert:lib"
     - path: "./src"
       component: "cv-convert:lib"
     - path: "./Main.hs"

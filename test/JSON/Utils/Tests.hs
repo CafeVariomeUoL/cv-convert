@@ -8,7 +8,7 @@ import qualified Test.QuickCheck.Monadic as QC
 import           Data.Aeson              (Value(..), encode)
 -- import           Control.Monad.IO.Class  (liftIO)
 -- import           Control.Monad.Catch     (SomeException, MonadCatch(..))
-import           Data.Text               (Text)
+import           Data.Text               (Text, pack)
 import           Data.String.Conv        (toS)
 import qualified Data.UUID               as UUID
 import qualified Data.HashMap.Strict     as HM
@@ -19,7 +19,6 @@ import           Data.Maybe              (fromJust)
 import           Data.Hashable           (Hashable)
 import           GHC.Generics            (Generic)
  
-import           Quickjs.Tests           (genText, genVal)
 import           JSON.Utils
 
 
@@ -106,6 +105,29 @@ newtype ToplevelObjectValue = ToplevelObjectValue Value
 
 instance Show ToplevelObjectValue where
   show (ToplevelObjectValue v) = toS $ encode v
+
+
+genText = do 
+  k <- QC.choose (0,200) 
+  pack <$> QC.vectorOf k (QC.oneof $ map pure $ ['0'..'~'])
+
+genVal 0 = QC.oneof
+  [ 
+    String <$> genText
+  , Number . fromInteger <$> QC.arbitrary
+  , Bool <$> QC.arbitrary
+  , pure Null
+  ]
+genVal n | n > 0 = QC.oneof
+  [ 
+    do { k <- QC.choose (0,n) ; Object . HM.fromList <$> (zip <$> QC.vectorOf k genText <*> QC.vectorOf k genVal') }      
+  , do { k <- QC.choose (0,n) ; Array . V.fromList <$> QC.vectorOf k genVal' }
+  , String <$> genText
+  , Number . fromInteger <$> QC.arbitrary
+  , Bool <$> QC.arbitrary
+  , pure Null
+  ]
+  where genVal' = genVal (n `div` 2)
 
 
 genToplevelObjectVal n = do 

@@ -292,7 +292,7 @@ processJsonFile rowFun validator fName outputHandle onError = do
   f <- liftIO $ BSL.readFile fName;
   let 
     (rows, hs) = case decode f of
-      Just (Array js) -> (V.toList js, S.toList $ V.foldl (\acc o -> (S.fromList $ getHeader o) `S.union` acc) S.empty js)
+      Just (Array js) -> (V.toList js, S.toList $ V.foldl' (\acc o -> (S.fromList $ getHeader o) `S.union` acc) S.empty js)
       Just o -> ([o], getHeader o)
       Nothing -> ([], [])
   

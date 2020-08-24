@@ -62,11 +62,8 @@ executable cv-convert
 library
   build-depends:
       base
-    , inline-c
-    , template-haskell
     , containers
     , mtl
-    , transformers
     , exceptions
     , aeson
     , aeson-pretty

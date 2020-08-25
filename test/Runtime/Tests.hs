@@ -40,7 +40,7 @@ import           DB
 
 
 load_lib :: Assertion
-load_lib = quickjs $ do
+load_lib = quickjsMultithreaded $ do
   loadLibrary $ Inline "Lib.helloWorld = function() {return 2;}"
   v <- eval "Lib.helloWorld();"
   liftIO $ v @?= Number 2
@@ -144,7 +144,7 @@ testProcessFileWithDB :: Config -> String -> String -> ByteString -> [Value] -> 
 testProcessFileWithDB config file file_contents row_fun expected = do
   bracket (connect config) (\con -> commit con >> disconnect con) (\con -> clear_eavs_jsonb con >> prepare_DB_for_test (takeFileName file) con)
   withUtf8 $ writeFile file file_contents
-  r <- quickjs $ do
+  r <- quickjsMultithreaded $ do
     _ <- eval_ $ "rowFun = function(row, header) { " <> row_fun <> " }"
     processFile
       (Just (config, SourceID 1) )
@@ -216,7 +216,7 @@ testProcessFile inFile rowFunFile = do
         Left (_ :: SomeException) -> ("return row;", Nothing, const [], Nothing, 0)
         Right res -> res
 
-  _ <- quickjs $ do
+  _ <- quickjsMultithreaded $ do
     mapM_ loadLibrary libraryFunctions
     _ <- eval_ $ "rowFun = function(row, header) { " <> row_fun <> " }"
     res <- try $ processFile

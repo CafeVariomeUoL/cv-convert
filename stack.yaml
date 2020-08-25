@@ -59,8 +59,7 @@ extra-deps:
 - tasty-1.3.1
 - tasty-golden-2.3.4
 - git: https://github.com/goodlyrottenapple/quickjs-hs.git
-  commit: 9b64ce22acd9b938f5710af0a61cf7eebf1a28c8
-#
+  commit: 97ecf4f3ed2c7eb88570f1fea6368361d2f61e33
 
 allow-newer: true
 

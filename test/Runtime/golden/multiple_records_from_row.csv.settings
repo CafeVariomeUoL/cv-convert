@@ -1,0 +1,64 @@
+{
+  "processFunction": "const res = [];\n\nfor(j = 0 ; j < row['Suspected Cases']; j++){\n  res.push({\n    subject_id: `${row.i}-${j}`,\n    sex: \"U\",\n    age: row['Age Group'] === \"<18\" ? 17 : 18,\n    diagnosis: row.Orphacode.replace(\"ORPHA\", \"ORPHA-\"),\n    case_type: \"suspected\"\n  })\n}\n\nfor(j = 0 ; j < row['Confirmed Cases']; j++){\n  res.push({\n    subject_id: `${row.i}-${parseInt(row['Suspected Cases']) + j}`,\n    sex: \"U\",\n    age: row['Age Group'] === \"<18\" ? 17 : 18,\n    diagnosis: row.Orphacode.replace(\"ORPHA\", \"ORPHA-\"),\n    case_type: \"confirmed\"\n  })\n}\n\nreturn res;",
+  "libraryFunctions": "Lib.calculate_age = function(dob) { \n    var diff_ms = Date.now() - dob.getTime();\n    var age_dt = new Date(diff_ms); \n  \n    return Math.abs(age_dt.getUTCFullYear() - 1970);\n}\n",
+  "tsInterface": "export default interface Row {\n    subject_id:          any;\n    sex:                 \"M\"|\"F\"|\"U\";\n    age:                 number;\n    diagnosis_age?:      number;\n    first_symptoms_age?: number;\n    diagnosis:           string;\n    case_type:           \"suspected\" | \"confirmed\";\n}",
+  "jsonSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "Row": {
+        "$ref": "#/definitions/default"
+      },
+      "default": {
+        "title": "default",
+        "type": "object",
+        "properties": {
+          "subject_id": {
+            "title": "subject_id"
+          },
+          "sex": {
+            "enum": [
+              "F",
+              "M",
+              "U"
+            ],
+            "type": "string",
+            "title": "sex"
+          },
+          "age": {
+            "type": "number",
+            "title": "age"
+          },
+          "diagnosis_age": {
+            "type": "number",
+            "title": "diagnosis_age"
+          },
+          "first_symptoms_age": {
+            "type": "number",
+            "title": "first_symptoms_age"
+          },
+          "diagnosis": {
+            "type": "string",
+            "title": "diagnosis"
+          },
+          "case_type": {
+            "enum": [
+              "confirmed",
+              "suspected"
+            ],
+            "type": "string",
+            "title": "case_type"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "age",
+          "case_type",
+          "diagnosis",
+          "sex",
+          "subject_id"
+        ]
+      }
+    },
+    "$ref": "#/definitions/default"
+  }
+}

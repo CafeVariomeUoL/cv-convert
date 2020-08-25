@@ -186,12 +186,25 @@ convertRow :: (MonadMask m, MonadIO m) =>
                 -- depending on where we output data
   -> ErrorOpts Handle (Connection, SourceID, FileID)
   -> Value -- ^ Row data as JSON
-  -> m (Maybe (HM.HashMap Value (S.HashSet Value))) -- ^ returns a map from JSON 'Value's to a set of 'Value's, 
+  -> m (HM.HashMap Value (S.HashSet Value)) -- ^ returns a map from JSON 'Value's to a set of 'Value's, 
                                                     -- by calling 'createAllPathsWithValues' on the converter function output
 convertRow i row header rowFun validator outputHandle onError rowJSON = 
   try (rowFun row header) >>= \case
-    Left (e::SomeRuntimeException) -> handleError onError i e rowJSON "" >> return Nothing
-    Right res -> do {
+    -- Below, we catch in two stages, to get better errors. Notice the second catch in 
+    -- the Right branch has the additional parameter res, which is added to the error
+    -- output for easier debugging.
+    Left (e::SomeRuntimeException) -> handleError onError i e rowJSON "" >> return HM.empty
+    Right (Array resMultiple) -> 
+      -- if rowFun returns an array of records, we process each one and merge the resulting
+      -- jsonAttrVals from each run.
+      ifoldlM (\j jsonAttrValsAcc res -> 
+        do
+          jsonAttrVals <- process j res
+          return $ HM.unionWith (S.union) jsonAttrVals jsonAttrValsAcc
+        ) HM.empty resMultiple 
+    Right res -> process (0::Int) res
+  where
+    process j res = do {
       validate validator res ;
       subjectID <- getSubjectID res ;
       liftIO $ case outputHandle of 
@@ -201,13 +214,12 @@ convertRow i row header rowFun validator outputHandle onError rowJSON =
           -- flatten record into EAV and insert into the EAV table
           (_,eav) <- flattenToEAV res
           forM_ eav $ \(uuid,attr,val) -> insertEAV uuid sourceID fileID subjectID attr val con
-
-          return $ Just $ createAllPathsWithValues res
+          return $ createAllPathsWithValues res
         JSONFileOutput outputFileHandle -> do
-          when (i > 0) $ BSL.hPutStr outputFileHandle " , "
+          when (i > 0 || j > 0) $ BSL.hPutStr outputFileHandle " , "
           BSL.hPutStr outputFileHandle $ encodePretty res
-          return Nothing ;
-    } `catch` \(e::SomeRuntimeException) -> handleError onError i e rowJSON res >> return Nothing
+          return HM.empty ;
+    } `catch` \(e::SomeRuntimeException) -> handleError onError i e rowJSON res >> return HM.empty
 
 {-|
 Helper function which loops over the rows of the given input, 
@@ -215,13 +227,11 @@ collecting and merging all the resulting maps (generated inside 'convertRow' via
 -}
 processRow :: (FoldableWithIndex Int f, MonadThrow m) => 
        f row -- ^ Any list like data structure containing rows we can loop over with an index
-    -> (Int -> row -> m (Maybe (HM.HashMap Value (S.HashSet Value)))) -- ^ Function that consumes the row together with it's index
+    -> (Int -> row -> m (HM.HashMap Value (S.HashSet Value))) -- ^ Function that consumes the row together with it's index
     -> m (HM.HashMap Value (S.HashSet Value))
 processRow input m = ifoldlM (\i jsonAttrValsAcc l -> do
-    jsonAttrValsMaybe <- m i l
-    case jsonAttrValsMaybe of 
-      Just jsonAttrVals -> return $ HM.unionWith (S.union) jsonAttrVals jsonAttrValsAcc
-      Nothing -> return jsonAttrValsAcc
+    jsonAttrVals <- m i l
+    return $ HM.unionWith (S.union) jsonAttrVals jsonAttrValsAcc
   ) HM.empty input
 
 
@@ -238,7 +248,7 @@ processTxtFile rowFun validator fName outputHandle onError startFromLine = do
   txt <- liftIO $ Text.hGetContents file
   withJSValue ([("h", "data")] :: [(Text.Text, Text.Text)]) $ \header ->
     processRow (Text.lines txt) $ \i l ->
-      if (i < startFromLine) then return Nothing
+      if (i < startFromLine) then return HM.empty
       else let rowJSON = Object $ HM.fromList [("i" , toJSON i), ("data" , toJSON l)] in withJSValue rowJSON $ \row ->
         convertRow i row header rowFun validator outputHandle onError rowJSON
   

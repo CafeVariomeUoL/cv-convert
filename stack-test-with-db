@@ -1,35 +1,91 @@
 #!/bin/bash
 
-port=5432
+function getContainerHealth {
+  docker inspect --format "{{.State.Health.Status}}" $1
+}
 
-isfree=$(netstat -taln | grep $port)
+function waitContainer {
+  echo "Waiting for '$1' to start"
+  while STATUS=$(getContainerHealth $1); [ $STATUS != "healthy" ]; do 
+    if [ $STATUS == "unhealthy" ]; then
+      echo "Failed!"
+      exit -1
+    fi
+    printf .
+    lf=$'\n'
+    sleep 5
+  done
+  printf "$lf"
+}
+
+docker_flag='false'
+
+print_usage() {
+  printf "Usage: -[d]ocker"
+}
+
+while getopts 'd' flag; do
+  case "${flag}" in
+    d) docker_flag='true' ;;
+    *) print_usage
+       exit 1 ;;
+  esac
+done
+
+
+echo "starting..."
+
+pgport=5432
+
+isfree=$(netstat -taln | grep $pgport)
 
 while [[ -n "$isfree" ]]; do
-  port=$((port+1))
-  isfree=$(netstat -taln | grep "$port")
+  pgport=$((pgport+1))
+  isfree=$(netstat -taln | grep "$pgport")
 done
 
-echo "Usable port for DB found: $port"
+echo "Usable port for Postgres found: $pgport"
 
-echo "Starting a docker postgres container..."
-docker run --rm --name cv-convert-test-postgres -p "$port":5432 -e POSTGRES_PASSWORD=mysecretpassword -d postgres
+echo "Starting a docker Postgres container..."
+docker run --rm --name cv-convert-test-postgres -p "$pgport":5432 -e POSTGRES_PASSWORD=mysecretpassword --health-cmd='pg_isready -U postgres' -d postgres
 
+
+mysqlport=3306
+
+isfree=$(netstat -taln | grep $mysqlport)
+
+while [[ -n "$isfree" ]]; do
+  mysqlport=$((mysqlport+1))
+  isfree=$(netstat -taln | grep "$mysqlport")
+done
+
+echo "Usable port for MySQL found: $mysqlport"
+
+echo "Starting a docker MySQL container..."
+docker run --rm --name cv-convert-test-mysql -p "$mysqlport":3306 -e MYSQL_ROOT_PASSWORD=mysecretpassword -e MYSQL_DATABASE=test --health-cmd='mysqladmin ping --silent' -d mariadb
 
 # make sure pg is ready to accept connections
-until pg_isready -h localhost -p "$port" -U postgres
-do
-  echo "Waiting for postgres..."
-  sleep 2;
-done
+waitContainer cv-convert-test-postgres
 
+# make sure pg is ready to accept connections
+waitContainer cv-convert-test-mysql
 
 Cleanup() {
-  echo "Stopping the postgres container..."
+  echo "Stopping containers..."
   docker stop cv-convert-test-postgres
+  docker stop cv-convert-test-mysql
 }
 
 echo "Running 'stack test'..."
 trap Cleanup EXIT
 
-stack test --flag 'cv-convert:azure' --ta "--postgres-db-config postgresql://postgres:mysecretpassword@localhost:$port/postgres" --ta '--delete-output onpass'
+
+if [ "$docker_flag" = "true" ]; then
+  stack test --docker --docker-image static-haskell-alpine-8.8.3 --flag 'cv-convert:azure' --ta "--db-config postgresql://postgres:mysecretpassword@localhost:$pgport/postgres;mysql://root:mysecretpassword@localhost:$mysqlport/test" --ta '--delete-output onpass'
+else
+  stack test --ta "--db-config postgresql://postgres:mysecretpassword@localhost:$pgport/postgres;mysql://root:mysecretpassword@localhost:$mysqlport/test" --ta '--delete-output onpass'
+fi
+
+
+
 

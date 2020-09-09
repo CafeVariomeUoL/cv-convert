@@ -1,6 +1,6 @@
 {
   "processFunction": "const ret = {\n  subject_id: row.i,\n  sex: row.pat_sex,\n  age: Lib.calculate_age(new Date(row.pat_birth_date)),\n  diagnosis_age: Math.round(row.pat_diagnosis_age/365),\n  first_symptoms_age: Math.round(row.pat_onset_age/365),\n  diagnosis: 0\n}\n\nif(row.pat_diagnosis_age_sel == \"99\") delete ret.diagnosis_age\nif(row.pat_onset_age_sel == \"99\") delete ret.first_symptoms_age\nreturn ret;",
-  "libraryFunctions": "Lib.calculate_age = function(dob) { \n    var diff_ms = Date.now() - dob.getTime();\n    var age_dt = new Date(diff_ms); \n  \n    return Math.abs(age_dt.getUTCFullYear() - 1970);\n}\n",
+  "libraryFunctions": "Lib.calculate_age = function(dob) { \n    var diff_ms = Date.parse('2020-09-01') - dob.getTime();\n    var age_dt = new Date(diff_ms); \n  \n    return Math.abs(age_dt.getUTCFullYear() - 1970);\n}\n",
   "tsInterface": "export default interface Row {\n    subject_id:          any;\n    sex:                 \"M\"|\"F\"|\"U\";\n    age:                 number;\n    diagnosis_age?:      number;\n    first_symptoms_age?: number;\n    diagnosis:           number|number[];\n}",
   "jsonSchema": {
     "$schema": "http://json-schema.org/draft-07/schema#",

@@ -23,6 +23,13 @@ services:
     ports:
     - 5432
     options: -e POSTGRES_PASSWORD=mysecretpassword
+  mysql:
+    image: mariadb
+    ports:
+      - 3306
+    env:
+      MYSQL_DATABASE: mysql
+      MYSQL_ROOT_PASSWORD: mysecretpassword
 
 steps:
 - task: Cache@2
@@ -50,7 +57,7 @@ steps:
     export PATH=$HOME/.local/bin:$PATH
     # Build the package, its tests, and its docs and run the tests
     # stack test --haddock --no-haddock-deps
-    stack test --flag 'cv-convert:azure' --jobs=1 --ta "--postgres-db-config postgresql://postgres:mysecretpassword@localhost:${AGENT_SERVICES_POSTGRES_PORTS_5432}/postgres"
+    stack test --flag 'cv-convert:azure' --jobs=1 --ta "--db-config postgresql://postgres:mysecretpassword@localhost:${AGENT_SERVICES_POSTGRES_PORTS_5432}/postgres;mysql://root:mysecretpassword@localhost:${AGENT_SERVICES_MYSQL_PORTS_3306}/mysql"
   displayName: Test Package
 - bash: |
     mkdir -p .azure-cache

@@ -9,73 +9,81 @@ Document converter used inside [CafeVariomeCI4](https://github.com/CafeVariomeUo
 The tool has a command line interface with the following basic usage:
 
 ```
-cv-convert (-i|--input STRING) (-s|--settings STRING) [-d|--db] 
-           [-e|--env STRING] [-s|--source_id SOURCEID]
+cv-convert (-i|--input STRING) (-s|--settings STRING) 
+           [-o|--output OUTPUTOPT] [-e|--env STRING] [--source_id INT]
 ```
 
 The required arguments are `-i` for passing in the path to the input file and `-s` for passing in the path to
 the `.settings` file, used to convert the file. When no other flags are passed as arguments, the output is written
 into a JSON file at `<path_to_input_file>.out.json`
 
-The flag `-d` indicates that the output should written directly into the database. This flag must be used together
-with the `-e` flag, used to specify the path to an ENV file, which must contain the `host`, `dbname`, `user` and `password`
-variables. These are used to establish a connection to the Postgres DB. When in DB mode, the output is stored as
-JSONB data in the `eavs_jsonb` table with the following schema:
+The flag `-o` takes the values:
 
-```sql
-CREATE TABLE eavs_jsonb (
-    id serial primary key,
-    source_id integer NOT NULL,
-    "fileName" integer NOT NULL,
-    subject_id text NOT NULL,
-    data jsonb NOT NULL,
-    unique(source_id,subject_id),
-    CONSTRAINT eavs_jsonb_source_id_fkey FOREIGN KEY (source_id)
-        REFERENCES sources (source_id) MATCH SIMPLE
-        ON UPDATE CASCADE
-        ON DELETE NO ACTION
-);
-```
+- `json` - directing the output into a JSON file.
+- `sql`- directing the output into an SQL statement file. The records are serialised into EAV triples and the insert statements produced are of the form:
+    ```sql
+    INSERT INTO eavs(uid, source, fileName, subject_id, type, attribute, value, elastic) 
+    VALUES ('de8a9663-6434-4050-bdf8-8d47552b7542', '1', 0, '0', 'attribute', 'subject_id', '0', 0);
+    ```
+    (See the section `DB` below for more info)
+- `db` - directing output into a dababase. Note: This flag must be used together with the `-e` flag, used to specify the path to an ENV file, which must contain the `host`, `dbname`, `user`, `password` and `db`, which can have value `mysql` or `postgres` variables. 
+    These are used to establish a connection to the DB. When writing to a `postgres` backend, the output is stored as
+    JSONB data in the `eavs_jsonb` table with the following schema:
 
-Metadata about the objects, stored in `eavs_jsonb` is then written into the `eavs_jsonb_attributes_values` table:
+    ```sql
+    CREATE TABLE eavs_jsonb (
+        id serial primary key,
+        source_id integer NOT NULL,
+        "fileName" integer NOT NULL,
+        subject_id text NOT NULL,
+        data jsonb NOT NULL,
+        unique(source_id,subject_id),
+        CONSTRAINT eavs_jsonb_source_id_fkey FOREIGN KEY (source_id)
+            REFERENCES sources (source_id) MATCH SIMPLE
+            ON UPDATE CASCADE
+            ON DELETE NO ACTION
+    );
+    ```
 
-```sql
-CREATE TABLE eavs_jsonb_attributes_values (
-    id serial primary key,
-    source_id integer NOT NULL,
-    attribute jsonb NOT NULL,
-    "values" jsonb NOT NULL,
-    unique(source_id,attribute),
-    CONSTRAINT eavs_jsonb_attributes_source_id_fkey FOREIGN KEY (source_id)
-        REFERENCES sources (source_id) MATCH SIMPLE
-        ON UPDATE CASCADE
-        ON DELETE CASCADE
-);
-```
+    Metadata about the objects, stored in `eavs_jsonb` is then written into the `eavs_jsonb_attributes_values` table:
 
-For more details on precisely what data gets stored in this table, see the [`createAllPathsWithValues`](https://cafevariomeuol.github.io/cv-convert/JSON-Utils.html#v:createAllPathsWithValues)
-function.
+    ```sql
+    CREATE TABLE eavs_jsonb_attributes_values (
+        id serial primary key,
+        source_id integer NOT NULL,
+        attribute jsonb NOT NULL,
+        "values" jsonb NOT NULL,
+        unique(source_id,attribute),
+        CONSTRAINT eavs_jsonb_attributes_source_id_fkey FOREIGN KEY (source_id)
+            REFERENCES sources (source_id) MATCH SIMPLE
+            ON UPDATE CASCADE
+            ON DELETE CASCADE
+    );
+    ```
 
-The records are also serialised into EAV triples using [`flattenToEAV`](https://cafevariomeuol.github.io/cv-convert/JSON-Utils.html#v:flattenToEAV) and stored in the `eavs` table:
+    For more details on precisely what data gets stored in this table, see the [`createAllPathsWithValues`](https://cafevariomeuol.github.io/cv-convert/JSON-Utils.html#v:createAllPathsWithValues)
+    function.
 
-```sql
-CREATE TABLE eavs (
-    id serial primary key,
-    uid character varying(50) NOT NULL,
-    source_id character varying(50) NOT NULL,
-    "fileName" integer NOT NULL,
-    subject_id text NOT NULL,
-    type character varying(20) NOT NULL,
-    attribute text NOT NULL,
-    value text,
-    elastic boolean DEFAULT false NOT NULL
-);
-```
+    The records are also serialised into EAV triples using [`flattenToEAV`](https://cafevariomeuol.github.io/cv-convert/JSON-Utils.html#v:flattenToEAV) and stored in the `eavs` table (both when `db` is `postgres` or `mysql`):
+
+    ```sql
+    CREATE TABLE eavs (
+        id serial primary key,
+        uid character varying(50) NOT NULL,
+        source_id character varying(50) NOT NULL,
+        "fileName" integer NOT NULL,
+        subject_id text NOT NULL,
+        type character varying(20) NOT NULL,
+        attribute text NOT NULL,
+        value text,
+        elastic boolean DEFAULT false NOT NULL
+    );
+    ```
 
 ---
 **NOTE**
 
-When using the `-d` flag, the `source_id` must also be provided via `-s <source_id>`, as its needed when inserting into the tables above.
+When using the `-o MySQL` or `-o DB` options, the `source_id` argument must also be provided via `-s <source_id>`, as it is needed when inserting into the tables above.
 
 ---
 
@@ -106,8 +114,8 @@ stack build --docker --docker-image static-haskell-alpine-8.8.3
 
 ## Tests
 
-For tests, run `./stack-test-with-db`. The script uses docker to create a temporary Postgres DB to run the test suite, including DB tests. 
-If you only want to run tests not involving the DB, you can do so via `stack test`.
+For tests, run `./stack-test-with-db`. The script uses docker to create a temporary Postgres and MySQL DBs to run the test suite. 
+If you only want to run tests not involving the DB, you can do so via running `stack test`.
 
 The tests are located in the `test/` folder and mirror the structure of the code inside the `src` folder, i.e.
 for `src/JSON/Utils.hs` we will have a corresponding test file `test/JSON/Utils/Tests.hs`. All tests are collected and launched via `test/Spec.hs`.
@@ -116,7 +124,7 @@ for `src/JSON/Utils.hs` we will have a corresponding test file `test/JSON/Utils/
 ---
 **NOTE**
 
-If running Stack locally on a mac, I would recommend also running `./stack-test-docker-with-db`, as there might be subtle differences that might show on Linux.
+If running Stack locally on a mac, I would recommend also running `./stack-test-with-db -d`, which runs the tests inside a docker container. This option is provided, as there might be subtle differences between macOS and Linux.
 
 ---
 

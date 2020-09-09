@@ -1,5 +1,5 @@
 name:                cv-convert
-version:             0.3
+version:             0.4
 build-type:          Simple
 cabal-version:       >= 1.25
 description: This tool is intended to be used inside CafeVariome to convert 
@@ -54,7 +54,8 @@ executable cv-convert
     , data-default-class
     , string-conv
     , with-utf8
-    , quickjs-hs
+    , quickjs-hs >= 0.1.2.1
+    , mysql-haskell
   ghc-options: -Wall -O2 -fno-warn-orphans
   if os(linux)
     ghc-options: -O2 -static
@@ -95,12 +96,14 @@ library
     , cryptohash-sha256
     , wreq
     , quickjs-hs
+    , mysql-haskell
+    , io-streams
   hs-source-dirs:
     src
   exposed-modules:
-    Runtime, Runtime.Error, JSON.Utils, DB
+    Runtime, Runtime.Error, JSON.Utils, DB, DB.Postgres, DB.MySQL
   other-modules:
-    Parse.Xlsx, Parse.Csv, Parse.Utils, Schema, Paths_cv_convert
+    Parse.Xlsx, Parse.Csv, Parse.Utils, Schema, DB.Types, Paths_cv_convert
   default-language:
     Haskell2010
   default-extensions:
@@ -158,4 +161,5 @@ test-suite cv-convert-test
     , strings
     , unliftio-core
     , quickjs-hs
+    , mysql-haskell
   default-language: Haskell2010

@@ -10,67 +10,70 @@ Maintainer  : sam@definitelynotspam.email
 
 The runtime module exports the main functionality of the cv-convert tool.
 -}
-module Runtime(SourceID, FileType(..), readFileType, SheetName, LibFunctions(..), Settings(..), loadLibrary, processFile, compileSchema, addOptsToFileType) where
+module Runtime(SourceID, OutputOpt(..), FileType(..), readFileType, SheetName, LibFunctions(..), Settings(..), loadLibrary, processFile, compileSchema, addOptsToFileType) where
 
-import           GHC.Generics
-import           Main.Utf8                    (withUtf8)
-import           System.IO                    (openFile, IOMode(..), Handle, hClose)
-import           Data.Aeson                   (Value(..), FromJSON(..), decode, toJSON, withText, (.:))
-import           Data.Aeson.Types             (unexpected)
-import           Data.Aeson.Encode.Pretty     (encodePretty)
-import qualified Data.ByteString.Lazy         as BSL
-import qualified Data.ByteString              as BS
-import qualified Data.ByteString.Builder      as BS
+import           GHC.Generics                  (Generic)
+import           Main.Utf8                     (withUtf8)
+import           System.IO                     (openFile, IOMode(..), Handle, hClose)
+import           Data.Aeson                    (Value(..), FromJSON(..), decode, toJSON, withText, (.:))
+import           Data.Aeson.Types              (unexpected)
+import           Data.Aeson.Encode.Pretty      (encodePretty)
+import qualified Data.ByteString.Lazy          as BSL
+import qualified Data.ByteString               as BS
+import qualified Data.ByteString.Builder       as BS
 
-import           Data.Text                    (Text)
-import qualified Data.Text                    as Text
-import qualified Data.Text.IO                 as Text
-import           Control.Monad.IO.Class       (MonadIO, liftIO)
-import           Control.Monad                (when, forM_, unless, mzero)
-import qualified Data.HashMap.Strict          as HM
-import           Control.Monad.Catch          (MonadThrow(..), MonadMask(..), try, catch, bracket)
-import           Control.Monad.Reader         (MonadReader)
-import           Control.Lens                 ((^.))
-import           Control.Lens.Combinators     (FoldableWithIndex, ifoldlM)
-import           System.FilePath.Posix        (takeFileName, (<.>))
-import           Data.Char                    (toLower)
-import           Data.String.Conv             (toS)
-import           System.Directory             (doesFileExist)
-import qualified Data.HashSet                 as S
-import qualified Data.Vector                  as V
-import           Database.HDBC.PostgreSQL.Pure(Config(..), Connection, connect)
-import           Database.HDBC.Types          (IConnection(commit, disconnect))
-import           Crypto.Hash.SHA256           (hashlazy)
-import           Network.Wreq                 (get, responseBody)
+import           Data.Bitraversable            (bimapM)
+import           Data.Text                     (Text)
+import qualified Data.Text                     as Text
+import qualified Data.Text.IO                  as Text
+import           Control.Monad.IO.Class        (MonadIO, liftIO)
+import           Control.Monad                 (when, forM_, unless, mzero)
+import qualified Data.HashMap.Strict           as HM
+import           Control.Monad.Catch           (MonadThrow(..), MonadMask(..), try, catch, bracket)
+import           Control.Monad.Reader          (MonadReader)
+import           Control.Lens                  ((^.))
+import           Control.Lens.Combinators      (FoldableWithIndex, ifoldlM)
+import           System.FilePath.Posix         (takeFileName, (<.>))
+import           Data.Char                     (toLower)
+import           Data.String.Conv              (toS)
+import           System.Directory              (doesFileExist)
+import qualified Data.HashSet                  as S
+import qualified Data.Vector                   as V
+import           Database.HDBC.PostgreSQL.Pure as Postgres
+import           Database.MySQL.Base           as MySQL
+import           Database.HDBC.Types           (IConnection(commit, disconnect))
+import           Crypto.Hash.SHA256            (hashlazy)
+import           Network.Wreq                  (get, responseBody)
 
 
 import           Runtime.Error
-import           Quickjs
-import           Quickjs.Error                (InternalError(..))
-import           Schema
-import           Parse.Xlsx
-import           Parse.Csv
+import           Quickjs                      (JSValue, JSContextPtr, eval_, withJSValue)
+import           Schema                       (compileSchema, validate, ValidatorFailure, Schema)
+import           Parse.Xlsx                   (readXlsxFile)
+import           Parse.Csv                    (readCsvFile)
 import           DB
-import           JSON.Utils
+import qualified DB.Postgres                  as Postgres
+import qualified DB.MySQL                     as MySQL
+import           JSON.Utils                   (createAllPathsWithValues, flattenToEAV, getSubjectID)
 
-data FileType txtOpts jsonOpts csvOpts xlsxOpts = TXT txtOpts | JSON jsonOpts | CSV csvOpts | XLSX xlsxOpts deriving (Eq, Generic)
+data FileType txtOpts jsonOpts csvOpts xlsxOpts = TXTFile txtOpts | JSONFile jsonOpts | CSVFile csvOpts | XLSXFile xlsxOpts deriving (Eq, Generic)
 
 instance FromJSON (FileType () () () ()) where 
   parseJSON = withText "FileType" $ \case 
-    s | s == "txt"  -> return $ TXT ()
-    s | s == "json" -> return $ JSON ()
-    s | s == "csv"  -> return $ CSV ()
-    s | s == "xlsx" -> return $ XLSX ()
+    s | s == "txt"  -> return $ TXTFile ()
+    s | s == "json" -> return $ JSONFile ()
+    s | s == "csv"  -> return $ CSVFile ()
+    s | s == "xlsx" -> return $ XLSXFile ()
     s | otherwise   -> unexpected $ String s
 
 instance Show (FileType a b c d) where 
-  show (TXT _)  = "TXT "
-  show (JSON _) = "JSON"
-  show (CSV _)  = "CSV "
-  show (XLSX _) = "XLSX"
+  show (TXTFile _)  = "TXT"
+  show (JSONFile _) = "JSON"
+  show (CSVFile _)  = "CSV"
+  show (XLSXFile _) = "XLSX"
 
 {-|
-Parses a file extension, such as @.txt@ into 'TXT'. 
+Parses a file extension, such as @.txt@ into 'TXTFile'. 
 Returns 'Nothing' if the extension does not mach any of the 'FileType's.
 -}
 readFileType :: FilePath -> Maybe (FileType () () () ())
@@ -79,10 +82,10 @@ readFileType s = decode $ toS $ "\"" ++ (map toLower $ tail s) ++ "\""
 
 
 addOptsToFileType :: txtOpts -> jsonOpts -> csvOpts -> xlsxOpts -> FileType a b c d -> FileType txtOpts jsonOpts csvOpts xlsxOpts
-addOptsToFileType txtOpts _        _       _        (TXT  _) = TXT txtOpts
-addOptsToFileType _       jsonOpts _       _        (JSON _) = JSON jsonOpts
-addOptsToFileType _       _        csvOpts _        (CSV  _) = CSV csvOpts
-addOptsToFileType _       _        _       xlsxOpts (XLSX _) = XLSX xlsxOpts
+addOptsToFileType txtOpts _        _       _        (TXTFile  _) = TXTFile txtOpts
+addOptsToFileType _       jsonOpts _       _        (JSONFile _) = JSONFile jsonOpts
+addOptsToFileType _       _        csvOpts _        (CSVFile  _) = CSVFile csvOpts
+addOptsToFileType _       _        _       xlsxOpts (XLSXFile _) = XLSXFile xlsxOpts
 
 newtype SheetName = SheetName {unSheetName :: Text} 
   deriving stock   (Show, Eq, Generic)
@@ -110,22 +113,26 @@ data Settings = Settings {
 , openAs :: Maybe (FileType () () () ()) -- ^ This parameter can be used to specify the parsing behaviour 
                            -- for files such as @.phenotype@, which should be parsed as 'JSON'.
                            -- If left blank, parsing defaults to either file extension 
-                           -- (if it corresponds to one of the 'FileType's), otherwise `TXT`.
-, startFrom :: Maybe Int -- ^ This parameter specifies how many rows should be skipped. Only works when parsing TXT files
-, onError :: Maybe (ErrorOpts () ()) -- ^ Specifies the error logging behaviour
+                           -- (if it corresponds to one of the 'FileType's), otherwise `TXTFile`.
+, startFrom :: Maybe Int -- ^ This parameter specifies how many rows should be skipped. Only works when parsing TXTFile files
+, onError :: Maybe (ErrorOpt () ()) -- ^ Specifies the error logging behaviour
 , worksheet :: Maybe SheetName -- ^ Used to specify which worksheet should be parsed.
-                               -- Only works for 'XLSX' files. If left blank, defaults to first found worksheet.
+                               -- Only works for 'XLSXFile' files. If left blank, defaults to first found worksheet.
 } deriving (Show, Eq, Generic)
 
 instance FromJSON Settings
 
 
+data OutputOpt = DB | SQL | JSON deriving (Show, Eq, Generic)
+
+
 data DataOutput = JSONFileOutput Handle 
                 | DBOutput { 
-                    con :: Connection
+                    con :: DBConn
                   , sourceID :: SourceID
                   , fileID :: FileID
                   }
+                | SQLFileOutput SourceID Handle
 
 {-|
 The 'loadLibrary' function takse a 'LibFunctions' parameter, which either contains an inline JS script or points
@@ -184,7 +191,7 @@ convertRow :: (MonadMask m, MonadIO m) =>
                                    -- conforms to the JSON schema, specified in 'jsonSchema'
   -> DataOutput -- ^ Either a Database connection or a file handle, 
                 -- depending on where we output data
-  -> ErrorOpts Handle (Connection, SourceID, FileID)
+  -> ErrorOpt Handle (DBConn, SourceID, FileID)
   -> Value -- ^ Row data as JSON
   -> m (HM.HashMap Value (S.HashSet Value)) -- ^ returns a map from JSON 'Value's to a set of 'Value's, 
                                                     -- by calling 'createAllPathsWithValues' on the converter function output
@@ -210,7 +217,9 @@ convertRow i row header rowFun validator outputHandle onError rowJSON =
       liftIO $ case outputHandle of 
         DBOutput{..} -> do
           -- insert record into the JSONB table
-          insertJSONBOverwriteOnConflict sourceID fileID subjectID res con
+          case con of 
+            Left conPostgres -> Postgres.insertJSONBOverwriteOnConflict sourceID fileID subjectID res conPostgres
+            Right _ -> pure ()
           -- flatten record into EAV and insert into the EAV table
           (_,eav) <- flattenToEAV res
           forM_ eav $ \(uuid,attr,val) -> insertEAV uuid sourceID fileID subjectID attr val con
@@ -218,6 +227,10 @@ convertRow i row header rowFun validator outputHandle onError rowJSON =
         JSONFileOutput outputFileHandle -> do
           when (i > 0 || j > 0) $ BSL.hPutStr outputFileHandle " , "
           BSL.hPutStr outputFileHandle $ encodePretty res
+          return HM.empty ;
+        SQLFileOutput sourceID outputFileHandle -> do
+          (_,eav) <- flattenToEAV res
+          forM_ eav $ \(uuid,attr,val) -> BSL.hPutStr outputFileHandle $ toS $ (fromQuery $ MySQL.insertEAVPrepareQuery uuid sourceID (FileID 0) subjectID attr val) <> ";\n"
           return HM.empty ;
     } `catch` \(e::SomeRuntimeException) -> handleError onError i e rowJSON res >> return HM.empty
 
@@ -240,7 +253,7 @@ processTxtFile :: (MonadMask m, MonadIO m, MonadReader JSContextPtr m) =>
   -> (Value -> [ValidatorFailure])
   -> FilePath
   -> DataOutput
-  -> ErrorOpts Handle (Connection, SourceID, FileID)
+  -> ErrorOpt Handle (DBConn, SourceID, FileID)
   -> Int
   -> m (HM.HashMap Value (S.HashSet Value))
 processTxtFile rowFun validator fName outputHandle onError startFromLine = do
@@ -259,7 +272,7 @@ processXlsxFile :: (MonadMask m, MonadIO m, MonadReader JSContextPtr m) =>
   -> (Value -> [ValidatorFailure])
   -> FilePath
   -> DataOutput
-  -> ErrorOpts Handle (Connection, SourceID, FileID)
+  -> ErrorOpt Handle (DBConn, SourceID, FileID)
   -> Maybe SheetName
   -> m (HM.HashMap Value (S.HashSet Value))
 processXlsxFile rowFun validator fName outputHandle onError sheetName = do
@@ -272,7 +285,7 @@ processXlsxFile rowFun validator fName outputHandle onError sheetName = do
             convertRow i row header rowFun validator outputHandle onError r
     Nothing -> case sheetName of
       Just (SheetName s) -> throwM $ SheetNotFound s
-      Nothing -> throwM $ InternalError $ "No sheets found in file."
+      Nothing -> throwM $ RuntimeError $ "No sheets found in file."
 
 
 
@@ -281,7 +294,7 @@ processCsvFile :: (MonadMask m, MonadIO m, MonadReader JSContextPtr m) =>
   -> (Value -> [ValidatorFailure])
   -> FilePath
   -> DataOutput
-  -> ErrorOpts Handle (Connection, SourceID, FileID)
+  -> ErrorOpt Handle (DBConn, SourceID, FileID)
   -> m (HM.HashMap Value (S.HashSet Value))
 processCsvFile rowFun validator fName outputHandle onError = do
   (h, rows) <- readCsvFile fName
@@ -296,7 +309,7 @@ processJsonFile :: (MonadMask m, MonadIO m, MonadReader JSContextPtr m) =>
   -> (Value -> [ValidatorFailure])
   -> FilePath
   -> DataOutput
-  -> ErrorOpts Handle (Connection, SourceID, FileID)
+  -> ErrorOpt Handle (DBConn, SourceID, FileID)
   -> m (HM.HashMap Value (S.HashSet Value))
 processJsonFile rowFun validator fName outputHandle onError = do 
   f <- liftIO $ BSL.readFile fName;
@@ -323,7 +336,7 @@ processJsonFile rowFun validator fName outputHandle onError = do
 -- -- processFile :: (
 -- --  MonadMask m, MonadIO m
 -- HasReader "onOutput" OutputOpts m
--- HasReader "onError" ErrorOpts m
+-- HasReader "onError" ErrorOpt m
 
 -- -- ) =>
 --      (JSValue -> JSValue -> m Value)  -- ^ Function taking the row and header `JSValue`s, returning a JSON 'Value'
@@ -335,17 +348,19 @@ processJsonFile rowFun validator fName outputHandle onError = do
 
 
 processFile :: (MonadMask m, MonadIO m, MonadReader JSContextPtr m) =>
-     Maybe (Config, SourceID) -- ^ Optional 'Config' and 'SourceID' parameter for connecting to a DB. If not provided, the function will 
+     Maybe (Either Postgres.Config MySQL.ConnectInfo) -- ^ Optional 'Config'/'ConnectInfo' (PostreSQL/MySQL) If not provided, the function will 
                               -- default to writing the output and logs to disk
+  -> Maybe SourceID -- ^ Optional 'SourceID' parameter for connecting to a DB or doing a DB dump. 
+  -> OutputOpt
   -> (JSValue -> JSValue -> m Value)  -- ^ Function taking the row and header `JSValue`s, returning a JSON 'Value'
   -> (Value -> [ValidatorFailure]) -- ^ Validator function, used to check that the output of the converter function
                                    -- conforms to the JSON schema, specified in 'jsonSchema'
   -> FilePath -- ^ Path of the input file
-  -> FileType Int () () (Maybe SheetName)  -- ^ Number of rows to skip/row number to start from only used when 'FileType' is 'TXT'. Default is 0.
-                                           -- Optional sheet name only used when 'FileType' is 'XLSX'.
-  -> ErrorOpts () () -- ^ Describes the error behaviour when parsing a row of the input. 
+  -> FileType Int () () (Maybe SheetName)  -- ^ Number of rows to skip/row number to start from only used when 'FileType' is 'TXTFile'. Default is 0.
+                                           -- Optional sheet name only used when 'FileType' is 'XLSXFile'.
+  -> ErrorOpt () () -- ^ Describes the error behaviour when parsing a row of the input. 
   -> m ()
-processFile dbConnInfo rowFun validator fName fType onError = 
+processFile dbConnInfo srcID outOpt rowFun validator fName fType onError = 
   bracket
     -- open a log file if 'LogToFile' was passed in onError
     (withLogToFileErrorOpt onError (\_ -> 
@@ -355,17 +370,18 @@ processFile dbConnInfo rowFun validator fName fType onError =
       LogToFile logFile -> liftIO $ hClose logFile
       _ -> pure ()) $
     -- main processing function
-    \(onErrorWLogFile :: ErrorOpts Handle ()) ->
+    \(onErrorWLogFile :: ErrorOpt Handle ()) ->
       -- if we have db conn info, we will be writing into the db instead of a file
-      case dbConnInfo of
-        Just (c, sourceID) ->
+      case (outOpt, dbConnInfo, srcID) of
+        -- Postgres
+        (DB, Just c, Just sourceID) ->
           bracket
             -- open a connection to the db
-            (liftIO $ connect c) 
+            (liftIO $ bimapM Postgres.connect MySQL.connect c) 
             -- this action runs after completing the main body function
-            (\con -> liftIO $ commit con >> disconnect con) $ 
+            (liftIO . either (\con -> commit con >> disconnect con) MySQL.close) $ 
             -- main body function
-            \con -> do 
+            \(con :: Either Postgres.Connection MySQL.MySQLConn) -> do 
               fileID <- do
                 liftIO $ getFileID sourceID (takeFileName fName) con >>= \case
                   Just fileID -> do
@@ -373,17 +389,15 @@ processFile dbConnInfo rowFun validator fName fType onError =
                     withLogToDBErrorOpt_ onError $ liftIO $ clearErrors sourceID fileID con
                     return fileID
                   Nothing -> throwM $ FileIDNotFound fName
-
               jsonAttrVals <- withLogToDBErrorOpt onErrorWLogFile (const $ return (con, sourceID, fileID)) >>= process DBOutput{..}
-              _ <- liftIO $ do
-                forM_ (HM.toList jsonAttrVals) $ \(attr,vs) ->
-                  insertJSONBAttributesValuesMergeOnConflict sourceID attr (toJSON vs) con
-
-                cleanupJSONBAttributesValues con
-              
-              pure ()
-
-        _ -> 
+              liftIO $ case con of 
+                Left conPostgres -> do
+                  forM_ (HM.toList jsonAttrVals) $ \(attr,vs) ->
+                    Postgres.insertJSONBAttributesValuesMergeOnConflict sourceID attr (toJSON vs) conPostgres
+                  _ <- Postgres.cleanupJSONBAttributesValues conPostgres
+                  return ()
+                Right _-> pure ()
+        (JSON, _, _) -> 
           bracket
             -- open an output file and write an opening bracket '['
             (liftIO $ writeFile (fName <.> "out.json") "[\n" >> openFile (fName <.> "out.json") AppendMode)
@@ -392,20 +406,34 @@ processFile dbConnInfo rowFun validator fName fType onError =
             -- main body
             \outputFileHandle ->
               -- we have to lift 'onErrorWLogFile' from 
-              --   ErrorOpts Handle () 
+              --   ErrorOpt Handle () 
               -- to 
-              --   ErrorOpts Handle (Connection, SourceID, FileID)
+              --   ErrorOpt Handle (Connection, SourceID, FileID)
               -- in order to pass it to processTxtFile/processXlsxFile/etc.
               -- however, we are not actually expecting 'onErrorWLogFile' to have the value 'LogToDb ()'
               -- since no DB Config + source_id info has been passed to this function therefore
               -- if we do encounter this value, something went wrong and we should throw an error.
               withLogToDBErrorOpt onErrorWLogFile 
-                (const $ throwM $ InternalError "trying to log to DB without providing a DB connection.") >>= 
+                (const $ throwM $ RuntimeError "Trying to log to DB without providing a DB connection.") >>= 
               process (JSONFileOutput outputFileHandle) >>
-              return ()   
+              return ()
+        (SQL, _, Just sourceID) -> 
+          bracket
+            -- open an output file 
+            (liftIO $ openFile (fName <.> "out.sql") AppendMode)
+            -- after the main body, close the file
+            (\outputFileHandle -> liftIO $ hClose outputFileHandle) $
+            -- main body
+            \outputFileHandle ->
+              withLogToDBErrorOpt onErrorWLogFile 
+                (const $ throwM $ RuntimeError "Trying to log to DB without providing a DB connection.") >>= 
+              process (SQLFileOutput sourceID outputFileHandle) >>
+              return ()
+        (SQL, _, Nothing) -> do
+          throwM $ RuntimeError "Please specify a souce id via --source_id, when output is Postgres/MySQL."
   where
     process outputHandle onErrorWLogAndDB = case fType of
-      TXT startFromLine -> processTxtFile  rowFun validator fName outputHandle onErrorWLogAndDB startFromLine 
-      XLSX sheetName    -> processXlsxFile rowFun validator fName outputHandle onErrorWLogAndDB sheetName
-      CSV _             -> processCsvFile  rowFun validator fName outputHandle onErrorWLogAndDB
-      JSON _            -> processJsonFile rowFun validator fName outputHandle onErrorWLogAndDB
+      TXTFile startFromLine -> processTxtFile  rowFun validator fName outputHandle onErrorWLogAndDB startFromLine 
+      XLSXFile sheetName    -> processXlsxFile rowFun validator fName outputHandle onErrorWLogAndDB sheetName
+      CSVFile _             -> processCsvFile  rowFun validator fName outputHandle onErrorWLogAndDB
+      JSONFile _            -> processJsonFile rowFun validator fName outputHandle onErrorWLogAndDB

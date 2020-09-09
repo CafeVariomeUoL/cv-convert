@@ -117,16 +117,37 @@ packages:
   original:
     hackage: tasty-golden-2.3.4
 - completed:
-    name: quickjs-hs
-    version: '0.1'
-    git: https://github.com/goodlyrottenapple/quickjs-hs.git
+    name: mysql-haskell
+    version: 0.8.4.2
+    git: https://github.com/jchia/mysql-haskell.git
     pantry-tree:
-      size: 4782
-      sha256: 88276738a3c4379ad66db5d7ee032cf00c134e640ebd623e7cee8fd914592dcb
-    commit: 9b64ce22acd9b938f5710af0a61cf7eebf1a28c8
+      size: 3863
+      sha256: 247db6b56fbd9fa95937bd07828931a6d92af224c227a1a82fd2c0456e4347ba
+    commit: b01d9f518e3614c9ee5580e64d61400ed8ab5b39
   original:
-    git: https://github.com/goodlyrottenapple/quickjs-hs.git
-    commit: 9b64ce22acd9b938f5710af0a61cf7eebf1a28c8
+    git: https://github.com/jchia/mysql-haskell.git
+    commit: b01d9f518e3614c9ee5580e64d61400ed8ab5b39
+- completed:
+    hackage: tcp-streams-1.0.1.1@sha256:35e9ecfa515797052f8c3c01834d2daebd5e93f3152c7fc98b32652bf6f0c052,2329
+    pantry-tree:
+      size: 1004
+      sha256: 572071fca40a0b6c4cc950d10277a6f12e83cf4846882b6ef83fcccaa2c18c45
+  original:
+    hackage: tcp-streams-1.0.1.1@sha256:35e9ecfa515797052f8c3c01834d2daebd5e93f3152c7fc98b32652bf6f0c052,2329
+- completed:
+    hackage: wire-streams-0.1.1.0@sha256:08816c7fa53b20f52e5c465252c106d9de8e6d9580ec0b6d9f000a34c7bcefc8,2130
+    pantry-tree:
+      size: 506
+      sha256: c99a12bfcbeacc5da8f166fbed1eb105a45f08be1a3a071fe9f903b386b14e1d
+  original:
+    hackage: wire-streams-0.1.1.0@sha256:08816c7fa53b20f52e5c465252c106d9de8e6d9580ec0b6d9f000a34c7bcefc8,2130
+- completed:
+    hackage: quickjs-hs-0.1.2.1@sha256:4731eed7fdeb098ca2b43a8e9a30eb7f41b923f44dd996ad137e6aa1014a2838,2917
+    pantry-tree:
+      size: 1529
+      sha256: 7c797d863a1af431958e8fbd62aa41c8ef20ed9557af5b689c50608a8e6fa790
+  original:
+    hackage: quickjs-hs-0.1.2.1
 snapshots:
 - completed:
     size: 496111

@@ -6,18 +6,25 @@ import           Test.Tasty.Golden            (DeleteOutputFile)
 import qualified Runtime.Tests
 import qualified JSON.Utils.Tests
 import           Database.HDBC.PostgreSQL.Pure(Config(..), Address(..))
+import           Database.MySQL.Base          (defaultConnectInfo, ConnectInfo(..))
 import           Network.URI                  (URI, URIAuth, parseURI, uriPath, uriAuthority, uriScheme, uriPort, uriRegName, uriUserInfo)
 import           Data.Default.Class           (def)
 import           Data.Proxy
 import           Data.Typeable
 import           Data.List.Split              (splitOn)
+import           Data.String.Conv             (toS)
+import           Control.Monad                (forM)
+import           Data.List.Split              (splitOn)
+
+import           DB                           (DBConfig)
 
 -- adapted from the https://hackage.haskell.org/package/postgresql-simple-url library
 
-uriToConfig :: URI -> Maybe Config
+uriToConfig :: URI -> Maybe DBConfig
 uriToConfig uri
-  | uriScheme uri /= "postgres:" && uriScheme uri /= "postgresql:" = Nothing
-  | otherwise = ($ def) <$> mkConfig uri
+  | uriScheme uri == "postgres:" || uriScheme uri == "postgresql:" = (Left . ($ def)) <$> mkConfig uri
+  | uriScheme uri == "mysql:" = (postgresToMySQLConfig . ($ def)) <$> mkConfig uri
+  | otherwise = Nothing
 
 type ConfigChange = Config -> Config
 
@@ -51,26 +58,37 @@ uriAuthParameters uriAuth = port . host . auth
                  [u, p] -> \info -> info { user = u, password = dropLast p }
                  _      -> id
 
-newtype PostgresDBConfig = PostgresDBConfig (Maybe Config)
+
+postgresToMySQLConfig :: Config -> DBConfig
+postgresToMySQLConfig (Config (AddressNotResolved host port) user pass db _ _ _ _) = Right $ 
+  defaultConnectInfo {
+    ciHost = host
+  , ciPort = read port
+  , ciDatabase = toS db
+  , ciUser = toS user 
+  , ciPassword = toS pass
+  }
+
+newtype DBConfigArg = DBConfigArg [DBConfig]
   deriving Typeable
 
-instance IsOption PostgresDBConfig where
-  defaultValue = PostgresDBConfig Nothing
-  parseValue v = parseURI v >>= Just . PostgresDBConfig . uriToConfig
-  optionName = return "postgres-db-config"
-  optionHelp = return "Postgres DB config passed in as a postgres:// url"
+instance IsOption DBConfigArg where
+  defaultValue = DBConfigArg []
+  parseValue v = DBConfigArg <$> (forM (splitOn ";" v) $ \s -> parseURI s >>= uriToConfig)
+  optionName = return "db-config"
+  optionHelp = return "DB config passed in as a postgres:// or mysql:// url"
 
 
 main :: IO ()
 main =  do
   runtimeTests <- Runtime.Tests.tests
   defaultMainWithIngredients (optsIng : defaultIngredients) $
-    askOption $ \(PostgresDBConfig config) -> testGroup "Tests"
+    askOption $ \(DBConfigArg config) -> testGroup "Tests"
       [ runtimeTests config
       , JSON.Utils.Tests.tests
       ]
   where
     optsIng = includingOptions [
-        Option (Proxy :: Proxy PostgresDBConfig)
+        Option (Proxy :: Proxy DBConfigArg)
       , Option (Proxy :: Proxy DeleteOutputFile)
       ]

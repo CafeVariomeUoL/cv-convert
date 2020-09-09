@@ -3,19 +3,18 @@
 
 module Runtime.Error where
 
-import           Data.Aeson                   (Value(..), ToJSON(..), FromJSON(..), GToJSON, encode, toJSON, genericToJSON, defaultOptions, tagSingleConstructors, sumEncoding, defaultTaggedObject, tagFieldName, Zero, withText)
-import           Data.Aeson.Types             (unexpected)
-import           Data.Typeable                (Typeable, cast)
+import           Data.Aeson                    (Value(..), ToJSON(..), FromJSON(..), GToJSON, encode, toJSON, genericToJSON, defaultOptions, tagSingleConstructors, sumEncoding, defaultTaggedObject, tagFieldName, Zero, withText)
+import           Data.Aeson.Types              (unexpected)
+import           Data.Typeable                 (Typeable, cast)
 import           GHC.Generics
-import           Control.Monad.IO.Class       (MonadIO, liftIO)
-import           Control.Monad.Catch          (MonadThrow(..), Exception, SomeException, toException, fromException)
-import           System.IO                    (Handle, hPutStrLn)
-import           System.FilePath.Posix        (takeFileName)
-import           Database.HDBC.PostgreSQL.Pure(Connection)
+import           Control.Monad.IO.Class        (MonadIO, liftIO)
+import           Control.Monad.Catch           (MonadThrow(..), Exception, SomeException, toException, fromException)
+import           System.IO                     (Handle, hPutStrLn)
+import           System.FilePath.Posix         (takeFileName)
 -- import           Database.HDBC.Types(SqlError)
-import qualified Data.Text                    as T
-import qualified Data.HashMap.Strict          as HM
-import           Data.String.Conv             (toS)
+import qualified Data.Text                     as T
+import qualified Data.HashMap.Strict           as HM
+import           Data.String.Conv              (toS)
 
 import           DB
 
@@ -26,11 +25,11 @@ Data type used to describe the error reporting/handling behaviour when processin
 Other than 'Terminate, all other options result in the error from a row being recorded/printed,
 with the computation continuing onto the next row.
 -}
-data ErrorOpts fileOpts dbOpts = Terminate | LogToConsole | LogToFile fileOpts | LogToDb dbOpts deriving (Show, Eq, Generic)
+data ErrorOpt fileOpts dbOpts = Terminate | LogToConsole | LogToFile fileOpts | LogToDb dbOpts deriving (Show, Eq, Generic)
 
 
-instance FromJSON (ErrorOpts () ()) where 
-  parseJSON = withText "ErrorOpts" $ \case 
+instance FromJSON (ErrorOpt () ()) where 
+  parseJSON = withText "ErrorOpt" $ \case 
     s | s == "terminate"  -> return Terminate
     s | s == "log_to_console" -> return LogToConsole
     s | s == "tog_to_file"  -> return $ LogToFile ()
@@ -38,23 +37,23 @@ instance FromJSON (ErrorOpts () ()) where
     s | otherwise   -> unexpected $ String s
 
 
-withLogToFileErrorOpt :: MonadIO m => ErrorOpts a b -> (a -> m fileOpts) -> m (ErrorOpts fileOpts b)
+withLogToFileErrorOpt :: MonadIO m => ErrorOpt a b -> (a -> m fileOpts) -> m (ErrorOpt fileOpts b)
 withLogToFileErrorOpt (LogToFile a) f = f a >>= return . LogToFile
 withLogToFileErrorOpt (LogToDb o)   _ = pure $ LogToDb o
 withLogToFileErrorOpt Terminate     _ = pure Terminate
 withLogToFileErrorOpt LogToConsole  _ = pure LogToConsole
 
-withLogToDBErrorOpt :: MonadIO m => ErrorOpts a b -> (b -> m dbOpts) -> m (ErrorOpts a dbOpts)
+withLogToDBErrorOpt :: MonadIO m => ErrorOpt a b -> (b -> m dbOpts) -> m (ErrorOpt a dbOpts)
 withLogToDBErrorOpt (LogToFile o) _ = pure $ LogToFile o
 withLogToDBErrorOpt (LogToDb b)   f = f b >>= return . LogToDb
 withLogToDBErrorOpt Terminate     _ = pure Terminate
 withLogToDBErrorOpt LogToConsole  _ = pure LogToConsole
 
-withLogToDBErrorOpt_ :: MonadIO m => ErrorOpts a b -> m () -> m ()
+withLogToDBErrorOpt_ :: MonadIO m => ErrorOpt a b -> m () -> m ()
 withLogToDBErrorOpt_ e m = withLogToDBErrorOpt e (const m) >> return ()
 
 handleError :: (MonadThrow m, MonadIO m) =>
-  ErrorOpts Handle (Connection, SourceID, FileID) -> Int -> SomeRuntimeException -> Value -> Value -> m ()
+  ErrorOpt Handle (DBConn, SourceID, FileID) -> Int -> SomeRuntimeException -> Value -> Value -> m ()
 handleError Terminate                      lineNo err inp out = 
   throwM $ RowError lineNo err inp out
 handleError LogToConsole                   lineNo err inp out = 
@@ -156,3 +155,12 @@ data HashMismatch = HashMismatch {url :: T.Text, expected_hash :: T.Text, found_
 
 instance Show HashMismatch where
   show HashMismatch{..} = toS $ "The hash for '" <> url <> "' is incorrect.\nExpected: " <> expected_hash <> "\nFound:    " <> found_hash
+
+
+data RuntimeError = RuntimeError String 
+  deriving (Generic, Typeable)
+  deriving ToJSON via (RuntimeException RuntimeError)
+  deriving Exception via (RuntimeException RuntimeError)
+
+instance Show RuntimeError where
+  show (RuntimeError e) = e

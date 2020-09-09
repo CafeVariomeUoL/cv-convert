@@ -134,8 +134,8 @@ The test suite is compiled and run multi-threaded. However, [QuickJS](https://be
 being run in a multi-threaded setting. Due to the way Haskell threads are mapped to OS threads, a Haskell thread can be run on different OS threads throughout its lifetime. 
 However, this is problematic for QuickJS, which seems to be tied to the OS thread it was started on.
 
-A fix for running locally involves running tests inside [`quickjsTest`](https://cafevariomeuol.github.io/cv-convert/Quickjs.html#v:quickjsTest) rather than the 
-[`quickjs`](https://cafevariomeuol.github.io/cv-convert/Quickjs.html#v:quickjs) environment). 
+A fix for running locally involves running tests inside [`quickjsMultithreaded`](https://hackage.haskell.org/package/quickjs-hs-0.1.2.1/docs/Quickjs.html#t:quickjsMultithreaded) rather than the 
+[`quickjs`](https://hackage.haskell.org/package/quickjs-hs-0.1.2.1/docs/Quickjs.html#t:quickjs) environment). 
 The difference between those two involves running all the QuickJS IO actions wrapped in a [`runInBoundThread`](https://hackage.haskell.org/package/base-4.14.0.0/docs/Control-Concurrent.html#v:runInBoundThread), 
 which binds the Haskell thread to the OS thread it was created in. This works on my local machine, but fails on Azure pipleines with:
 

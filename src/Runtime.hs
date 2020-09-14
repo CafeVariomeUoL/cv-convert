@@ -56,6 +56,10 @@ import qualified DB.Postgres                  as Postgres
 import qualified DB.MySQL                     as MySQL
 import           JSON.Utils                   (createAllPathsWithValues, flattenToEAV, getSubjectID)
 
+
+{-|
+Type encoding the input document type along with potential parsing/processing options.
+-}
 data FileType txtOpts jsonOpts csvOpts xlsxOpts = TXTFile txtOpts | JSONFile jsonOpts | CSVFile csvOpts | XLSXFile xlsxOpts deriving (Eq, Generic)
 
 instance FromJSON (FileType () () () ()) where 
@@ -105,7 +109,9 @@ instance FromJSON LibFunctions where
   parseJSON (String t) = return $ Inline $ toS t
   parseJSON _ = mzero
 
-
+{-|
+Internal representation of a '.settings' file.
+-}
 data Settings = Settings { 
   processFunction :: Text -- ^ A string containg the JS function which will be applied to the input
 , libraryFunctions :: Maybe LibFunctions
@@ -113,7 +119,7 @@ data Settings = Settings {
 , openAs :: Maybe (FileType () () () ()) -- ^ This parameter can be used to specify the parsing behaviour 
                            -- for files such as @.phenotype@, which should be parsed as 'JSON'.
                            -- If left blank, parsing defaults to either file extension 
-                           -- (if it corresponds to one of the 'FileType's), otherwise `TXTFile`.
+                           -- (if it corresponds to one of the 'FileType's), otherwise 'TXTFile'.
 , startFrom :: Maybe Int -- ^ This parameter specifies how many rows should be skipped. Only works when parsing TXTFile files
 , onError :: Maybe (ErrorOpt () ()) -- ^ Specifies the error logging behaviour
 , worksheet :: Maybe SheetName -- ^ Used to specify which worksheet should be parsed.
@@ -122,7 +128,9 @@ data Settings = Settings {
 
 instance FromJSON Settings
 
-
+{-|
+Output options specified by the '-o' flag via the CLI (options are '-o db|sql|json')
+-}
 data OutputOpt = DB | SQL | JSON deriving (Show, Eq, Generic)
 
 
@@ -333,18 +341,6 @@ processJsonFile rowFun validator fName outputHandle onError = do
 
 
 
--- -- processFile :: (
--- --  MonadMask m, MonadIO m
--- HasReader "onOutput" OutputOpts m
--- HasReader "onError" ErrorOpt m
-
--- -- ) =>
---      (JSValue -> JSValue -> m Value)  -- ^ Function taking the row and header `JSValue`s, returning a JSON 'Value'
---   -> (Value -> [ValidatorFailure]) -- ^ Validator function, used to check that the output of the converter function
---                                    -- conforms to the JSON schema, specified in 'jsonSchema'
---   -> FilePath -- ^ Path of the input file
---   -> FileType ? ? ? ?
---   -> m ()
 
 
 processFile :: (MonadMask m, MonadIO m, MonadReader JSContextPtr m) =>

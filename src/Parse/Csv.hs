@@ -17,6 +17,14 @@ instance FoldableWithIndex Int Records
 instance TraversableWithIndex Int Records
 instance FunctorWithIndex Int Records
 
+-- Some UTF-8 encoded files start with the BOM mark, see:
+-- https://en.wikipedia.org/wiki/Byte_order_mark
+-- This messes up stuff and is not needed, so we remove it.
+dropBOM :: BS.ByteString -> BS.ByteString
+dropBOM bs | BS.take 3 bs == BS.pack [0xEF,0xBB,0xBF] = BS.drop 3 bs
+           | otherwise = bs
+
+
 readCsvFile :: (MonadThrow m, MonadIO m) => FilePath -> m ([JSON.Value], Records (HM.HashMap Text JSON.Value))
 readCsvFile inFile = readCsvFileWithDelimiter [',', ';'] inFile
 
@@ -25,7 +33,7 @@ readCsvFile inFile = readCsvFileWithDelimiter [',', ';'] inFile
 -- In that case, try parsing the file again with ';' instead. If we still get only one header, revert to default, i.e. parsing with ','.
 readCsvFileWithDelimiter :: (MonadThrow m, MonadIO m) => [Char] -> FilePath -> m ([JSON.Value], Records (HM.HashMap Text JSON.Value))
 readCsvFileWithDelimiter [] inFile = do
-  rows <- liftIO $ decode NoHeader <$> BS.readFile inFile
+  rows <- liftIO $ decode NoHeader <$> dropBOM <$> BS.readFile inFile
   case rows of
     Cons (Right (h :: [Text])) rest -> let header = uniqueHeader h in 
       return (map (uncurry unifyHeader) $ zip header h, fmap (\r -> HM.fromList $ zip header $ map JSON.toJSON r) rest)
@@ -33,7 +41,7 @@ readCsvFileWithDelimiter [] inFile = do
     Nil (Just e) _ -> throwM $ CSVParseError e
     Nil Nothing r -> return ([], Nil Nothing r)
 readCsvFileWithDelimiter (delim:alts) inFile = do
-  rows <- liftIO $ decodeWith defaultDecodeOptions{ decDelimiter = fromIntegral (ord delim) } NoHeader <$> BS.readFile inFile
+  rows <- liftIO $ decodeWith defaultDecodeOptions{ decDelimiter = fromIntegral (ord delim) } NoHeader <$> dropBOM <$> BS.readFile inFile
   case rows of
     Cons (Right (h :: [Text])) rest -> 
       if length h < 2 then readCsvFileWithDelimiter alts inFile

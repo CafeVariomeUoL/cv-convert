@@ -1,5 +1,5 @@
 name:                cv-convert
-version:             0.4
+version:             0.4.1
 build-type:          Simple
 cabal-version:       >= 1.25
 description: This tool is intended to be used inside CafeVariome to convert 

@@ -1,0 +1,38 @@
+{
+  "processFunction": "return {subject_id: `${row.i}`, condition: row.Condition, diagnosis: row.Orphacode}",
+  "libraryFunctions": "Lib.calculate_age = function(dob) { \n    var diff_ms = Date.now() - dob.getTime();\n    var age_dt = new Date(diff_ms); \n  \n    return Math.abs(age_dt.getUTCFullYear() - 1970);\n}\n",
+  "tsInterface": "export default interface Row {\n    subject_id: string;\n    condition:  string;\n    diagnosis:  string;\n}\n",
+  "jsonSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "Row": {
+        "$ref": "#/definitions/default"
+      },
+      "default": {
+        "title": "default",
+        "type": "object",
+        "properties": {
+          "subject_id": {
+            "type": "string",
+            "title": "subject_id"
+          },
+          "condition": {
+            "type": "string",
+            "title": "condition"
+          },
+          "diagnosis": {
+            "type": "string",
+            "title": "diagnosis"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "condition",
+          "diagnosis",
+          "subject_id"
+        ]
+      }
+    },
+    "$ref": "#/definitions/default"
+  }
+}

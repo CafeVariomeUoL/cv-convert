@@ -1,0 +1,27 @@
+[
+{
+    "diagnosis": "ORPHA437",
+    "condition": "Hypophosphataemic rickets",
+    "subject_id": "0"
+} , {
+    "diagnosis": "ORPHA89936",
+    "condition": "X-linked hypophosphataemia",
+    "subject_id": "1"
+} , {
+    "diagnosis": "ORPHA89937",
+    "condition": "Autosomal dominant hypophosphataemic rickets",
+    "subject_id": "2"
+} , {
+    "diagnosis": "ORPHA289176",
+    "condition": "Autosomal recessive hypophosphataemic rickets",
+    "subject_id": "3"
+} , {
+    "diagnosis": "ORPHA157215",
+    "condition": "Hereditary hypophosphataemic rickets with hypercalciuria",
+    "subject_id": "4"
+} , {
+    "diagnosis": "ORPHA352540",
+    "condition": "Oncogenic osteomalacia",
+    "subject_id": "5"
+}
+]

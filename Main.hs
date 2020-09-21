@@ -1,3 +1,4 @@
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE CPP, TypeOperators, DataKinds, StandaloneDeriving, GeneralizedNewtypeDeriving #-}
 
 import           Options.Generic
@@ -12,51 +13,57 @@ import           System.FilePath.Posix         (takeExtension)
 import           System.Directory              (doesFileExist)
 import           LoadEnv                       (loadEnvFromAbsolute)
 import           System.Environment            (lookupEnv)
-import           Database.HDBC.PostgreSQL.Pure as Postgres
-import           Database.MySQL.Base           as MySQL
-import           Data.Default.Class            (def)
 import           Data.String.Conv              (toS)
 import           Paths_cv_convert              (version)
 import           Data.Version                  (showVersion)
 
 import           Runtime
-import           Runtime.Error
 import           Quickjs
-import           DB                            (SourceID(..))
+import           DB                            (ConnInfo, DBType(..), SomeDBType(..), User(..), Password(..), Host(..), Port(..), Database(..), SourceID(..), mkConnInfo)
 
 
 instance ParseField SourceID
 
-instance Read OutputOpt where
-  readsPrec _ ('d':'b':therest) = [(DB,therest)]
-  readsPrec _ ('s':'q':'l':therest) = [(SQL,therest)]
-  readsPrec _ ('j':'s':'o':'n':therest) = [(JSON,therest)]
-  readsPrec _ _ = []
+{-|
+Output options specified by the '-o' flag via the CLI (options are '-o db|sql|json')
+-}
+newtype Output = Output {unOutput :: Text} 
+  deriving (Read, Show, Eq, Generic)
 
-instance ParseField OutputOpt
+instance ParseField Output
 
 
 
 data Options w = Options
   { input     :: w ::: FilePath         <?> "Input file"
   , settings  :: w ::: FilePath         <?> "Settings file"
-  , output    :: w ::: Maybe OutputOpt  <?> "Output type"
-  , env       :: w ::: Maybe FilePath   <?> "Path to .env file used for the DB connection (must include host, port, dbname, user, password)"
-  , source_id :: w ::: Maybe Int        <?> "Souce ID used for DB insert"
+  , output    :: w ::: Maybe Output     <?> "Output type, one of db|sql|json, defaults to json"
+  , env       :: w ::: Maybe FilePath   <?> "Path to .env file used for the DB connection (must include db_type, host, dbname, user, password; the port parameter is optional)"
+  , sourceId  :: w ::: Maybe Int        <?> "Souce ID used for DB insert"
+  , dbConfig  :: w ::: Maybe String     <?> "DB Connection URI string in the format db_type://user:password@host:port/dbname"
   }
   deriving (Generic)
 
 nameMod :: String -> Maybe Char
-nameMod "source_id" = Nothing
+nameMod "source-id" = Nothing
+nameMod "db-config" = Nothing
 nameMod s = firstLetter s
 
 instance ParseRecord (Options Wrapped) where
-  parseRecord = parseRecordWithModifiers defaultModifiers{ 
+  parseRecord = parseRecordWithModifiers lispCaseModifiers{ 
     shortNameModifier = nameMod
   }
     
-
 deriving instance Show (Options Unwrapped)
+
+
+mkDataOutputOpt :: Maybe ConnInfo -> Maybe SourceID -> Maybe Text -> DataOutputOpt
+mkDataOutputOpt (Just connInfo) (Just sourceID) (Just "db")   = DBOutputOpt connInfo sourceID
+mkDataOutputOpt _               (Just sourceID) (Just "sql")  = SQLFileOutputOpt sourceID
+mkDataOutputOpt _               Nothing         (Just "sql")  = error "--source-id argument is required when writing to an SQL file."
+mkDataOutputOpt _               _               (Just "json") = JSONFileOutputOpt
+mkDataOutputOpt _               _               (Just u)      = error $ "Invalid data output option: " ++ toS u
+mkDataOutputOpt _               _               Nothing       = JSONFileOutputOpt
 
 
 color :: String -> String
@@ -80,33 +87,30 @@ main = withUtf8 $ do
     loadEnvFromAbsolute envPath 
     liftIO $ putStrLn ("Loaded env..." :: String)
   else pure ()
-  let outOpt = fromMaybe Runtime.JSON output
 
   dbConnInfo <- 
-    if outOpt == DB then do
-      when (source_id == Nothing) $ error "source_id is required when inserting into DB"
-      [db_type, host, database, user, password] <- mapM (\e -> do
-        v <- lookupEnv e
-        case v of 
-          Just var -> return var
-          Nothing -> error $ "Variable " ++ e ++ " is not defined.") ["db", "host", "dbname", "user", "password"]
-      
-      port <- lookupEnv "port"
-
-      case db_type of
-        "postgres" -> do
-          let address = Postgres.AddressNotResolved host (fromMaybe "5432" port)
-          return $ Just $ Left def{address = address , database = database , user = user , password = password}
-        "mysql" -> 
-          return $ Just $ Right MySQL.defaultConnectInfo{
-            ciHost = host
-          , ciPort = fromMaybe 3306 $ fmap read port
-          , ciDatabase = toS database
-          , ciUser = toS user
-          , ciPassword = toS password
-          }
-        other -> error $ "DB type " ++ other ++ " is not supported."
+    if output == (Just (Output "db")) then 
+      case dbConfig of
+        Just s -> return $ mkConnInfo s
+        Nothing ->
+          if envExists then do
+            when (sourceId == Nothing) $ error "--source-id argument is required when inserting into DB"
+            [db_type, host, db, user, pass] <- mapM (\e -> do
+              v <- lookupEnv e
+              case v of 
+                Just var -> return var
+                Nothing -> error $ "Variable " ++ e ++ " is not defined.") ["db", "host", "dbname", "user", "password"]
+            port <- lookupEnv "port"
+            case db_type of
+              "postgres" -> return $ Just (SomeDBType Postgres, User user, Password pass, Host host, Port port, Database db)
+              "postgresql" -> return $ Just (SomeDBType Postgres, User user, Password pass, Host host, Port port, Database db)
+              "mysql" -> return $ Just (SomeDBType MySQL, User user, Password pass, Host host, Port port, Database db)
+              other -> error $ "DB type " ++ other ++ " is not supported."
+          else error "No DB connection parameters were provided. Please specify these using the --db-config flag or inside a .env file."
     else return Nothing
+  
+  let outOpt = mkDataOutputOpt dbConnInfo (SourceID <$> sourceId) (unOutput <$> output)
+
 
   fileSettings <- openFile settings ReadMode
   txtSettings <- BS.hGetContents fileSettings
@@ -117,32 +121,19 @@ main = withUtf8 $ do
           putStrLn "Invalid schema"
           putStrLn $ show e
         Right validator ->
-          let fileType = fromMaybe (fromMaybe (TXTFile ()) $ readFileType $ takeExtension input) openAs in 
           quickjs $ do
             mapM_ loadLibrary libraryFunctions
             _ <- eval_ $ "rowFun = (row, header) => { " <> toS processFunction <> " }"
             
-            processFile 
-              dbConnInfo
-              (SourceID <$> source_id)
-              outOpt
+            processFile
               rowFun 
               validator 
               input 
-              (addOptsToFileType (fromMaybe 0 startFrom) () () worksheet fileType)
-              (onErrorBehaviour dbConnInfo onError) 
+              (fromSpecifiedFileType (tail $ takeExtension input) openAs)
+              outOpt
+              (fromMaybe LogToConsole onError) 
               
     Nothing -> putStrLn "Invalid Settings file"
 
   where
     rowFun row header = call "rowFun" [row, header]
-
-    -- if we specifed logging in the settings file, we use that setting
-    -- if we have a DB connection and haven't explicitly specified logging, we default to logging erros to db
-    -- otherwise we log to console 
-    onErrorBehaviour dbConnInfo onError = case (dbConnInfo, onError) of
-      (_, Just e) -> e
-      (Just _, Nothing) -> LogToDb ()
-      (Nothing, Nothing) -> LogToConsole
-   
-

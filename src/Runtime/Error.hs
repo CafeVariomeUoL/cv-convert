@@ -3,67 +3,37 @@
 
 module Runtime.Error where
 
-import           Data.Aeson                    (Value(..), ToJSON(..), FromJSON(..), GToJSON, encode, toJSON, genericToJSON, defaultOptions, tagSingleConstructors, sumEncoding, defaultTaggedObject, tagFieldName, Zero, withText)
-import           Data.Aeson.Types              (unexpected)
+import           Data.Aeson                    (Value(..), ToJSON(..), GToJSON, encode, toJSON, genericToJSON, defaultOptions, tagSingleConstructors, sumEncoding, defaultTaggedObject, tagFieldName, Zero)
 import           Data.Typeable                 (Typeable, cast)
 import           GHC.Generics
 import           Control.Monad.IO.Class        (MonadIO, liftIO)
 import           Control.Monad.Catch           (MonadThrow(..), Exception, SomeException, toException, fromException)
-import           System.IO                     (Handle, hPutStrLn)
+import           System.IO                     (hPutStrLn)
 import           System.FilePath.Posix         (takeFileName)
 -- import           Database.HDBC.Types(SqlError)
 import qualified Data.Text                     as T
 import qualified Data.HashMap.Strict           as HM
 import           Data.String.Conv              (toS)
 
+import           Runtime.Types
 import           DB
 
 
 
-{-|
-Data type used to describe the error reporting/handling behaviour when processing a row. 
-Other than 'Terminate, all other options result in the error from a row being recorded/printed,
-with the computation continuing onto the next row.
--}
-data ErrorOpt fileOpts dbOpts = Terminate | LogToConsole | LogToFile fileOpts | LogToDb dbOpts deriving (Show, Eq, Generic)
-
-
-instance FromJSON (ErrorOpt () ()) where 
-  parseJSON = withText "ErrorOpt" $ \case 
-    s | s == "terminate"  -> return Terminate
-    s | s == "log_to_console" -> return LogToConsole
-    s | s == "tog_to_file"  -> return $ LogToFile ()
-    s | s == "log_to_db" -> return $ LogToDb ()
-    s | otherwise   -> unexpected $ String s
-
-
-withLogToFileErrorOpt :: MonadIO m => ErrorOpt a b -> (a -> m fileOpts) -> m (ErrorOpt fileOpts b)
-withLogToFileErrorOpt (LogToFile a) f = f a >>= return . LogToFile
-withLogToFileErrorOpt (LogToDb o)   _ = pure $ LogToDb o
-withLogToFileErrorOpt Terminate     _ = pure Terminate
-withLogToFileErrorOpt LogToConsole  _ = pure LogToConsole
-
-withLogToDBErrorOpt :: MonadIO m => ErrorOpt a b -> (b -> m dbOpts) -> m (ErrorOpt a dbOpts)
-withLogToDBErrorOpt (LogToFile o) _ = pure $ LogToFile o
-withLogToDBErrorOpt (LogToDb b)   f = f b >>= return . LogToDb
-withLogToDBErrorOpt Terminate     _ = pure Terminate
-withLogToDBErrorOpt LogToConsole  _ = pure LogToConsole
-
-withLogToDBErrorOpt_ :: MonadIO m => ErrorOpt a b -> m () -> m ()
-withLogToDBErrorOpt_ e m = withLogToDBErrorOpt e (const m) >> return ()
 
 handleError :: (MonadThrow m, MonadIO m) =>
-  ErrorOpt Handle (DBConn, SourceID, FileID) -> Int -> SomeRuntimeException -> Value -> Value -> m ()
-handleError Terminate                      lineNo err inp out = 
+  ErrorHandling -> Int -> SomeRuntimeException -> Value -> Value -> m ()
+handleError (ErrorHandling (Terminate   , _                               )) lineNo err inp out = 
   throwM $ RowError lineNo err inp out
-handleError LogToConsole                   lineNo err inp out = 
+handleError (ErrorHandling (LogToConsole, _                               )) lineNo err inp out = 
   liftIO $ putStrLn $ show $ RowError lineNo err inp out
-handleError (LogToFile logFile)            lineNo err inp out = 
+handleError (ErrorHandling (_         , Just (JSONFileOutput logFile)   )) lineNo err inp out = 
   liftIO $ hPutStrLn logFile $ show $ RowError lineNo err inp out
-handleError (LogToDb (con, srcID, fileID)) lineNo err inp out = liftIO $ do
+handleError (ErrorHandling (_         , Just (DBOutput con srcID fileID))) lineNo err inp out = liftIO $ do
   putStrLn $ show $ RowError lineNo err inp out
   insertError srcID fileID (show $ RowError lineNo err inp out) con 
-
+handleError (ErrorHandling (_         , _                               )) lineNo err inp out = 
+  liftIO $ putStrLn $ show $ RowError lineNo err inp out
 
 data SomeRuntimeException = forall e . (Exception e, ToJSON e) => SomeRuntimeException e 
 

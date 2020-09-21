@@ -1,3 +1,5 @@
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE QuasiQuotes, OverloadedLists #-}
 
 module Runtime.Tests(tests) where
@@ -29,6 +31,7 @@ import           Control.Exception             (SomeException)
 import           Control.Monad.IO.Unlift       (MonadUnliftIO(..), UnliftIO(..), askUnliftIO)
 
 import           Runtime
+import           Runtime.Types                 (Specified(..))
 import           Runtime.Error
 import           Quickjs
 import           Quickjs.Error
@@ -175,17 +178,14 @@ ALTER TABLE `upload_error`
 INSERT INTO sources(source_id, name) VALUES (1, 'test_src');
 |]
 
-create_tables :: DBConfig -> Assertion
-create_tables (Left config) = 
+create_tables :: ConnInfo -> Assertion
+create_tables (SomeDBType (db_type :: DBType ty), user, pass, host, port, db) = 
   bracket
-    (Postgres.connect config) 
-    (\con -> commit con >> disconnect con)
-    makeDatabaseSchemaPostgres
-create_tables (Right config) = bracket
-    (MySQL.connect config) 
-    MySQL.close
-    (\con -> MySQL.executeMany_ con makeDatabaseSchemaMySQL >> return ())
-
+    (DB.connect user pass host port db) 
+    DB.disconnect $
+    \(con :: ty) -> case db_type of
+      Postgres -> makeDatabaseSchemaPostgres con
+      MySQL -> MySQL.executeMany_ con makeDatabaseSchemaMySQL >> return ()
 
 
 
@@ -216,42 +216,38 @@ SELECT CAST(data AS VARCHAR)
 |]
 
 
-testProcessFileWithDB :: DBConfig -> String -> String -> ByteString -> [Value] -> Assertion
-testProcessFileWithDB c@(Left config) file file_contents row_fun expected = do
-  bracket (Postgres.connect config) (\con -> commit con >> disconnect con) (\con -> clear_eavs_jsonb con >> prepare_Postgres_for_test (takeFileName file) con)
+testProcessFileWithDB :: ConnInfo -> String -> String -> ByteString -> [Value] -> Assertion
+testProcessFileWithDB c@(SomeDBType Postgres, user, pass, host, port, db) file file_contents row_fun expected = do
+  bracket (DB.connect @Connection user pass host port db) DB.disconnect (\con -> clear_eavs_jsonb con >> prepare_Postgres_for_test (takeFileName file) con)
   withUtf8 $ writeFile file file_contents
   r <- quickjsMultithreaded $ do
     _ <- eval_ $ "rowFun = function(row, header) { " <> row_fun <> " }"
     processFile
-      (Just c)
-      (Just $ SourceID 1)
-      DB
       rowFun
       (const [])
       file
-      (JSONFile ())
-      (LogToDb ())
-  bracket (Postgres.connect config) (\con -> commit con >> disconnect con) $ \con -> do
+      JSONFile
+      (DBOutputOpt c $ SourceID 1)
+      Log
+  bracket (DB.connect @Connection user pass host port db) DB.disconnect $ \con -> do
     res <- selectAllFromEAVS_JSONB (takeFileName file) con
     res @?= expected
   removeFile file
 
   where
     rowFun row header = call "rowFun" [row, header]
-testProcessFileWithDB c@(Right config) file file_contents row_fun expected = do
-  bracket (MySQL.connect config) MySQL.close (\con -> prepare_MySQL_for_test (takeFileName file) con)
+testProcessFileWithDB c@(SomeDBType MySQL, user, pass, host, port, db) file file_contents row_fun expected = do
+  bracket (DB.connect user pass host port db) DB.disconnect (\con -> prepare_MySQL_for_test (takeFileName file) con)
   withUtf8 $ writeFile file file_contents
   _ <- quickjsMultithreaded $ do
     _ <- eval_ $ "rowFun = function(row, header) { " <> row_fun <> " }"
     processFile
-      (Just c)
-      (Just $ SourceID 1)
-      DB
       rowFun
       (const [])
       file
-      (JSONFile ())
-      (LogToDb ())
+      JSONFile
+      (DBOutputOpt c $ SourceID 1)
+      Log
   return ()
   where
     rowFun row header = call "rowFun" [row, header]
@@ -296,31 +292,31 @@ testProcessFile inFile rowFunFile = do
   settings <- withUtf8 $ try $ do
     txtSettings <- BSL.readFile rowFunFile
     case (decode txtSettings :: Maybe Settings) of
+      Nothing -> throwM $ InternalError "Invalid Settings file"
       Just Settings{..} -> do
         case compileSchema jsonSchema of
           Left e -> do
             throwM $ InternalError "Invalid schema"
           Right validator ->
-            return (toS processFunction, libraryFunctions, validator, worksheet, fromMaybe 0 startFrom)
-      Nothing -> throwM $ InternalError "Invalid Settings file"
+            return (toS processFunction, libraryFunctions, validator, openAs)
 
   let 
-    (row_fun, libraryFunctions, validator, sheetName, startFrom) = 
+    (row_fun, libraryFunctions, validator, openAs) = 
       case settings of
-        Left (_ :: SomeException) -> ("return row;", Nothing, const [], Nothing, 0)
+        Left (_ :: SomeException) -> ("return row;", Nothing, const [], Unspecified)
         Right res -> res
+  
+
 
   _ <- quickjsMultithreaded $ do
     mapM_ loadLibrary libraryFunctions
     _ <- eval_ $ "rowFun = function(row, header) { " <> row_fun <> " }"
     res <- try $ processFile
-      Nothing
-      Nothing
-      JSON
       rowFun
       validator
       inFile
-      (addOptsToFileType startFrom () () sheetName fileType)      
+      (fileType openAs)
+      JSONFileOutputOpt
       Terminate
     case res of
       Left (e :: RowError) -> liftIO $ withUtf8 $ writeFile (inFile <.> "out.json") $ show e
@@ -330,7 +326,7 @@ testProcessFile inFile rowFunFile = do
   return ()
   where
     rowFun row header = call "rowFun" [row, header]
-    fileType = fromMaybe (TXTFile ()) $ readFileType $ takeExtension inFile
+    fileType openAs = fromSpecifiedFileType (tail $ takeExtension inFile) openAs
 
 
 goldenTestsProcessFile :: IO TestTree
@@ -354,11 +350,11 @@ goldenTestsProcessFile = do
     , let goldenFile = "./test/Runtime/golden" </> inputFile <.> "gold"
           outputFile = "./test/Runtime/golden" </> inputFile <.> "out.json"
           rowFunFile = "./test/Runtime/golden" </> inputFile <.> "settings"
-          fileType = fromMaybe (TXTFile ()) $ readFileType $ takeExtension inputFile
+          fileType = fromSpecifiedFileType (tail $ takeExtension inputFile) Unspecified
     ]
 
 
-tests :: IO ([DBConfig] -> TestTree)
+tests :: IO ([ConnInfo] -> TestTree)
 tests = do
   goldenTests <- goldenTestsProcessFile
   return $ \c -> testGroup "Runtime" $
@@ -367,7 +363,7 @@ tests = do
     ] ++ (concat $ flip map c $
       \config -> 
         [ 
-          testGroup ("processFile DB tests - " ++ case config of { Left _ -> "Postgres" ; Right _ -> "MySQL" })
+          testGroup ("processFile DB tests - " ++ case config of { (SomeDBType Postgres, _, _, _, _, _) -> "Postgres" ; (SomeDBType MySQL, _, _, _, _, _) -> "MySQL" })
             [ testCase "connect to the DB and set up tables" $ create_tables config
             , after AllSucceed "connect to the DB and set up tables" $
                 testCase "test the processFile function on a JSON file 1" $ 

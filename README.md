@@ -10,7 +10,8 @@ The tool has a command line interface with the following basic usage:
 
 ```
 cv-convert (-i|--input STRING) (-s|--settings STRING) 
-           [-o|--output OUTPUTOPT] [-e|--env STRING] [--source_id INT]
+           [-o|--output OUTPUTOPT] [-e|--env STRING] [-s|--source-id INT]
+           [-d|--db-config STRING]
 ```
 
 The required arguments are `-i` for passing in the path to the input file and `-s` for passing in the path to
@@ -26,8 +27,11 @@ The flag `-o` takes the values:
     VALUES ('de8a9663-6434-4050-bdf8-8d47552b7542', '1', 0, '0', 'attribute', 'subject_id', '0', 0);
     ```
     (See the section `DB` below for more info)
-- `db` - directing output into a dababase. Note: This flag must be used together with the `-e` flag, used to specify the path to an ENV file, which must contain the `host`, `dbname`, `user`, `password` and `db`, which can have value `mysql` or `postgres` variables. 
-    These are used to establish a connection to the DB. When writing to a `postgres` backend, the output is stored as
+- `db` - directing output into a dababase. Note: This flag must be used together with either:
+    *   the `-e` flag, used to specify the path to an ENV file, which must contain the `host`, `dbname`, `user`, `password` and `db`, which can have value `mysql` or `postgres` variables, or
+    *   the `--db-config` flag, passing in a DB connection URI in the form `db_type://user:password@host:port/dbname`
+    
+    These parameters are used to establish a connection to the DB. When writing to a `postgres` backend, the output is stored as
     JSONB data in the `eavs_jsonb` table with the following schema:
 
     ```sql

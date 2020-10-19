@@ -1,6 +1,8 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE CPP, TypeOperators, DataKinds, StandaloneDeriving, GeneralizedNewtypeDeriving #-}
 
+module Main where
+
 import           Options.Generic
 import           System.IO                     (openFile, IOMode(..))
 import           Main.Utf8                     (withUtf8)
@@ -21,23 +23,13 @@ import           Runtime
 import           Quickjs
 import           DB                            (ConnInfo, DBType(..), SomeDBType(..), User(..), Password(..), Host(..), Port(..), Database(..), SourceID(..), mkConnInfo)
 
-
-instance ParseField SourceID
-
 {-|
 Output options specified by the '-o' flag via the CLI (options are '-o db|sql|json')
 -}
-newtype Output = Output {unOutput :: Text} 
-  deriving (Read, Show, Eq, Generic)
-
-instance ParseField Output
-
-
-
 data Options w = Options
   { input     :: w ::: FilePath         <?> "Input file"
   , settings  :: w ::: FilePath         <?> "Settings file"
-  , output    :: w ::: Maybe Output     <?> "Output type, one of db|sql|json, defaults to json"
+  , output    :: w ::: Maybe String     <?> "Output type, one of db|sql|json, defaults to json"
   , env       :: w ::: Maybe FilePath   <?> "Path to .env file used for the DB connection (must include db_type, host, dbname, user, password; the port parameter is optional)"
   , sourceId  :: w ::: Maybe Int        <?> "Souce ID used for DB insert"
   , dbConfig  :: w ::: Maybe String     <?> "DB Connection URI string in the format db_type://user:password@host:port/dbname"
@@ -57,7 +49,7 @@ instance ParseRecord (Options Wrapped) where
 deriving instance Show (Options Unwrapped)
 
 
-mkDataOutputOpt :: Maybe ConnInfo -> Maybe SourceID -> Maybe Text -> DataOutputOpt
+mkDataOutputOpt :: Maybe ConnInfo -> Maybe SourceID -> Maybe String -> DataOutputOpt
 mkDataOutputOpt (Just connInfo) (Just sourceID) (Just "db")   = DBOutputOpt connInfo sourceID
 mkDataOutputOpt _               (Just sourceID) (Just "sql")  = SQLFileOutputOpt sourceID
 mkDataOutputOpt _               Nothing         (Just "sql")  = error "--source-id argument is required when writing to an SQL file."
@@ -89,7 +81,7 @@ main = withUtf8 $ do
   else pure ()
 
   dbConnInfo <- 
-    if output == (Just (Output "db")) then 
+    if output == (Just "db") then 
       case dbConfig of
         Just s -> return $ mkConnInfo s
         Nothing ->
@@ -109,7 +101,7 @@ main = withUtf8 $ do
           else error "No DB connection parameters were provided. Please specify these using the --db-config flag or inside a .env file."
     else return Nothing
   
-  let outOpt = mkDataOutputOpt dbConnInfo (SourceID <$> sourceId) (unOutput <$> output)
+  let outOpt = mkDataOutputOpt dbConnInfo (SourceID <$> sourceId) output
 
 
   fileSettings <- openFile settings ReadMode

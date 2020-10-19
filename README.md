@@ -10,7 +10,7 @@ The tool has a command line interface with the following basic usage:
 
 ```
 cv-convert (-i|--input STRING) (-s|--settings STRING) 
-           [-o|--output OUTPUTOPT] [-e|--env STRING] [-s|--source-id INT]
+           [-o|--output STRING] [-e|--env STRING] [-s|--source-id INT]
            [-d|--db-config STRING]
 ```
 

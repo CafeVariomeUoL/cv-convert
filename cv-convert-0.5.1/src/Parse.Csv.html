@@ -1,0 +1,266 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Parse.Csv</span><span class="hs-special">(</span><span class="annot"><a href="Parse.Csv.html#readCsvFile"><span class="hs-identifier">readCsvFile</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-2"></span><span>
+</span><span id="line-3"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Char</span></span><span>                  </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">ord</span></span><span class="hs-special">)</span><span>
+</span><span id="line-4"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Text</span></span><span>                  </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Text</span></span><span class="hs-special">)</span><span>
+</span><span id="line-5"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.ByteString.Lazy</span></span><span>       </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">BS</span></span><span>
+</span><span id="line-6"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Aeson</span></span><span>                 </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">JSON</span></span><span>
+</span><span id="line-7"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Csv.Streaming</span></span><span>         </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Records</span></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">HasHeader</span></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">decode</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">decodeWith</span></span><span class="hs-special">)</span><span>
+</span><span id="line-8"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Csv.Parser</span></span><span>            </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">defaultDecodeOptions</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">decDelimiter</span></span><span class="hs-special">)</span><span>
+</span><span id="line-9"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.HashMap.Strict</span></span><span>        </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">HM</span></span><span>
+</span><span id="line-10"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Monad.Catch</span></span><span>        </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">MonadThrow</span></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-11"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Monad.IO.Class</span></span><span>     </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">MonadIO</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">liftIO</span></span><span class="hs-special">)</span><span>
+</span><span id="line-12"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Lens.Combinators</span></span><span>   </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">FoldableWithIndex</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">TraversableWithIndex</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">FunctorWithIndex</span></span><span class="hs-special">)</span><span>
+</span><span id="line-13"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Parse.Utils.html"><span class="hs-identifier">Parse.Utils</span></a></span><span>
+</span><span id="line-14"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Runtime.Error.html"><span class="hs-identifier">Runtime.Error</span></a></span><span>
+</span><span id="line-15"></span><span>
+</span><span id="line-16"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679570334"><span id="local-6989586621679570336"><span id="local-6989586621679570338"><span id="local-6989586621679570340"><span id="local-6989586621679570342"><span id="local-6989586621679570344"><span class="annot"><span class="hs-identifier hs-type">FoldableWithIndex</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Records</span></span></span></span></span></span></span></span><span>
+</span><span id="line-17"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679570326"><span id="local-6989586621679570328"><span class="annot"><span class="hs-identifier hs-type">TraversableWithIndex</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Records</span></span></span></span><span>
+</span><span id="line-18"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679570320"><span id="local-6989586621679570322"><span class="annot"><span class="hs-identifier hs-type">FunctorWithIndex</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Records</span></span></span></span><span>
+</span><span id="line-19"></span><span>
+</span><span id="line-20"></span><span class="hs-comment">-- Some UTF-8 encoded files start with the BOM mark, see:</span><span>
+</span><span id="line-21"></span><span class="hs-comment">-- https://en.wikipedia.org/wiki/Byte_order_mark</span><span>
+</span><span id="line-22"></span><span class="hs-comment">-- This messes up stuff and is not needed, so we remove it.</span><span>
+</span><span id="line-23"></span><span class="annot"><a href="Parse.Csv.html#dropBOM"><span class="hs-identifier hs-type">dropBOM</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">BS.ByteString</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">BS.ByteString</span></span><span>
+</span><span id="line-24"></span><span id="dropBOM"><span class="annot"><span class="annottext">dropBOM :: ByteString -&gt; ByteString
+</span><a href="Parse.Csv.html#dropBOM"><span class="hs-identifier hs-var hs-var">dropBOM</span></a></span></span><span> </span><span id="local-6989586621679570317"><span class="annot"><span class="annottext">bs :: ByteString
+</span><a href="#local-6989586621679570317"><span class="hs-identifier hs-var">bs</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Int64 -&gt; ByteString -&gt; ByteString
+</span><span class="hs-identifier hs-var">BS.take</span></span><span> </span><span class="annot"><span class="hs-number">3</span></span><span> </span><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679570317"><span class="hs-identifier hs-var">bs</span></a></span><span> </span><span class="annot"><span class="annottext">ByteString -&gt; ByteString -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">[Word8] -&gt; ByteString
+</span><span class="hs-identifier hs-var">BS.pack</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-number">0xEF</span></span><span class="hs-special">,</span><span class="annot"><span class="hs-number">0xBB</span></span><span class="hs-special">,</span><span class="annot"><span class="hs-number">0xBF</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int64 -&gt; ByteString -&gt; ByteString
+</span><span class="hs-identifier hs-var">BS.drop</span></span><span> </span><span class="annot"><span class="hs-number">3</span></span><span> </span><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679570317"><span class="hs-identifier hs-var">bs</span></a></span><span>
+</span><span id="line-25"></span><span>           </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679570317"><span class="hs-identifier hs-var">bs</span></a></span><span>
+</span><span id="line-26"></span><span>
+</span><span id="line-27"></span><span>
+</span><span id="line-28"></span><span id="local-6989586621679570313"><span class="annot"><a href="Parse.Csv.html#readCsvFile"><span class="hs-identifier hs-type">readCsvFile</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">MonadThrow</span></span><span> </span><span class="annot"><a href="#local-6989586621679570313"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">MonadIO</span></span><span> </span><span class="annot"><a href="#local-6989586621679570313"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">FilePath</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679570313"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">JSON.Value</span></span><span class="hs-special">]</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Records</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">HM.HashMap</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">JSON.Value</span></span><span class="hs-special">)</span><span class="hs-special">)</span></span><span>
+</span><span id="line-29"></span><span id="readCsvFile"><span class="annot"><span class="annottext">readCsvFile :: FilePath -&gt; m ([Value], Records (HashMap Text Value))
+</span><a href="Parse.Csv.html#readCsvFile"><span class="hs-identifier hs-var hs-var">readCsvFile</span></a></span></span><span> </span><span id="local-6989586621679570312"><span class="annot"><span class="annottext">inFile :: FilePath
+</span><a href="#local-6989586621679570312"><span class="hs-identifier hs-var">inFile</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">FilePath -&gt; FilePath -&gt; m ([Value], Records (HashMap Text Value))
+forall (m :: * -&gt; *).
+(MonadThrow m, MonadIO m) =&gt;
+FilePath -&gt; FilePath -&gt; m ([Value], Records (HashMap Text Value))
+</span><a href="Parse.Csv.html#readCsvFileWithDelimiter"><span class="hs-identifier hs-var">readCsvFileWithDelimiter</span></a></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-char">','</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-char">';'</span></span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">FilePath
+</span><a href="#local-6989586621679570312"><span class="hs-identifier hs-var">inFile</span></a></span><span>
+</span><span id="line-30"></span><span>
+</span><span id="line-31"></span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- Try parsing a CSV file with ',' as the delimiter. If we encounter only one header, it is likely that a different separator was used.</span><span>
+</span><span id="line-33"></span><span class="hs-comment">-- In that case, try parsing the file again with ';' instead. If we still get only one header, revert to default, i.e. parsing with ','.</span><span>
+</span><span id="line-34"></span><span id="local-6989586621679570402"><span class="annot"><a href="Parse.Csv.html#readCsvFileWithDelimiter"><span class="hs-identifier hs-type">readCsvFileWithDelimiter</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">MonadThrow</span></span><span> </span><span class="annot"><a href="#local-6989586621679570402"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">MonadIO</span></span><span> </span><span class="annot"><a href="#local-6989586621679570402"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Char</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">FilePath</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679570402"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">JSON.Value</span></span><span class="hs-special">]</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Records</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">HM.HashMap</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">JSON.Value</span></span><span class="hs-special">)</span><span class="hs-special">)</span></span><span>
+</span><span id="line-35"></span><span id="readCsvFileWithDelimiter"><span class="annot"><span class="annottext">readCsvFileWithDelimiter :: FilePath -&gt; FilePath -&gt; m ([Value], Records (HashMap Text Value))
+</span><a href="Parse.Csv.html#readCsvFileWithDelimiter"><span class="hs-identifier hs-var hs-var">readCsvFileWithDelimiter</span></a></span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span id="local-6989586621679570310"><span class="annot"><span class="annottext">inFile :: FilePath
+</span><a href="#local-6989586621679570310"><span class="hs-identifier hs-var">inFile</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-36"></span><span>  </span><span id="local-6989586621679570309"><span class="annot"><span class="annottext">Records [Text]
+</span><a href="#local-6989586621679570309"><span class="hs-identifier hs-var">rows</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO (Records [Text]) -&gt; m (Records [Text])
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">liftIO</span></span><span> </span><span class="annot"><span class="annottext">(IO (Records [Text]) -&gt; m (Records [Text]))
+-&gt; IO (Records [Text]) -&gt; m (Records [Text])
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">HasHeader -&gt; ByteString -&gt; Records [Text]
+forall a. FromRecord a =&gt; HasHeader -&gt; ByteString -&gt; Records a
+</span><span class="hs-identifier hs-var">decode</span></span><span> </span><span class="annot"><span class="annottext">HasHeader
+</span><span class="hs-identifier hs-var">NoHeader</span></span><span> </span><span class="annot"><span class="annottext">(ByteString -&gt; Records [Text])
+-&gt; (ByteString -&gt; ByteString) -&gt; ByteString -&gt; Records [Text]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">ByteString -&gt; ByteString
+</span><a href="Parse.Csv.html#dropBOM"><span class="hs-identifier hs-var">dropBOM</span></a></span><span> </span><span class="annot"><span class="annottext">(ByteString -&gt; Records [Text])
+-&gt; IO ByteString -&gt; IO (Records [Text])
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">FilePath -&gt; IO ByteString
+</span><span class="hs-identifier hs-var">BS.readFile</span></span><span> </span><span class="annot"><span class="annottext">FilePath
+</span><a href="#local-6989586621679570310"><span class="hs-identifier hs-var">inFile</span></a></span><span>
+</span><span id="line-37"></span><span>  </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Records [Text]
+</span><a href="#local-6989586621679570309"><span class="hs-identifier hs-var">rows</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-38"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Cons</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Right</span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679570304"><span class="annot"><span class="annottext">[Text]
+</span><a href="#local-6989586621679570304"><span class="hs-identifier hs-var">h</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span class="hs-special">]</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span id="local-6989586621679570303"><span class="annot"><span class="annottext">rest :: Records [Text]
+</span><a href="#local-6989586621679570303"><span class="hs-identifier hs-var">rest</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679570302"><span class="annot"><span class="annottext">header :: [Text]
+</span><a href="#local-6989586621679570302"><span class="hs-identifier hs-var hs-var">header</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Text] -&gt; [Text]
+forall (t :: * -&gt; *) a.
+(Traversable t, Ord a, Semigroup a, StringConv FilePath a) =&gt;
+t a -&gt; t a
+</span><a href="Parse.Utils.html#uniqueHeader"><span class="hs-identifier hs-var">uniqueHeader</span></a></span><span> </span><span class="annot"><span class="annottext">[Text]
+</span><a href="#local-6989586621679570304"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="hs-keyword">in</span><span> </span><span>
+</span><span id="line-39"></span><span>      </span><span class="annot"><span class="annottext">([Value], Records (HashMap Text Value))
+-&gt; m ([Value], Records (HashMap Text Value))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">((Text, Text) -&gt; Value) -&gt; [(Text, Text)] -&gt; [Value]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(Text -&gt; Text -&gt; Value) -&gt; (Text, Text) -&gt; Value
+forall a b c. (a -&gt; b -&gt; c) -&gt; (a, b) -&gt; c
+</span><span class="hs-identifier hs-var">uncurry</span></span><span> </span><span class="annot"><span class="annottext">Text -&gt; Text -&gt; Value
+</span><a href="Parse.Utils.html#unifyHeader"><span class="hs-identifier hs-var">unifyHeader</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">([(Text, Text)] -&gt; [Value]) -&gt; [(Text, Text)] -&gt; [Value]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Text] -&gt; [Text] -&gt; [(Text, Text)]
+forall a b. [a] -&gt; [b] -&gt; [(a, b)]
+</span><span class="hs-identifier hs-var">zip</span></span><span> </span><span class="annot"><span class="annottext">[Text]
+</span><a href="#local-6989586621679570302"><span class="hs-identifier hs-var">header</span></a></span><span> </span><span class="annot"><span class="annottext">[Text]
+</span><a href="#local-6989586621679570304"><span class="hs-identifier hs-var">h</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">([Text] -&gt; HashMap Text Value)
+-&gt; Records [Text] -&gt; Records (HashMap Text Value)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679570298"><span class="annot"><span class="annottext">r :: [Text]
+</span><a href="#local-6989586621679570298"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[(Text, Value)] -&gt; HashMap Text Value
+forall k v. (Eq k, Hashable k) =&gt; [(k, v)] -&gt; HashMap k v
+</span><span class="hs-identifier hs-var">HM.fromList</span></span><span> </span><span class="annot"><span class="annottext">([(Text, Value)] -&gt; HashMap Text Value)
+-&gt; [(Text, Value)] -&gt; HashMap Text Value
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Text] -&gt; [Value] -&gt; [(Text, Value)]
+forall a b. [a] -&gt; [b] -&gt; [(a, b)]
+</span><span class="hs-identifier hs-var">zip</span></span><span> </span><span class="annot"><span class="annottext">[Text]
+</span><a href="#local-6989586621679570302"><span class="hs-identifier hs-var">header</span></a></span><span> </span><span class="annot"><span class="annottext">([Value] -&gt; [(Text, Value)]) -&gt; [Value] -&gt; [(Text, Value)]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Text -&gt; Value) -&gt; [Text] -&gt; [Value]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">Text -&gt; Value
+forall a. ToJSON a =&gt; a -&gt; Value
+</span><span class="hs-identifier hs-var">JSON.toJSON</span></span><span> </span><span class="annot"><span class="annottext">[Text]
+</span><a href="#local-6989586621679570298"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Records [Text]
+</span><a href="#local-6989586621679570303"><span class="hs-identifier hs-var">rest</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-40"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Cons</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Left</span></span><span> </span><span id="local-6989586621679570295"><span class="annot"><span class="annottext">e :: FilePath
+</span><a href="#local-6989586621679570295"><span class="hs-identifier hs-var">e</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-identifier">_</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">CSVParseError -&gt; m ([Value], Records (HashMap Text Value))
+forall (m :: * -&gt; *) e a. (MonadThrow m, Exception e) =&gt; e -&gt; m a
+</span><span class="hs-identifier hs-var">throwM</span></span><span> </span><span class="annot"><span class="annottext">(CSVParseError -&gt; m ([Value], Records (HashMap Text Value)))
+-&gt; CSVParseError -&gt; m ([Value], Records (HashMap Text Value))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">FilePath -&gt; CSVParseError
+</span><a href="Runtime.Error.html#CSVParseError"><span class="hs-identifier hs-var">CSVParseError</span></a></span><span> </span><span class="annot"><span class="annottext">FilePath
+</span><a href="#local-6989586621679570295"><span class="hs-identifier hs-var">e</span></a></span><span>
+</span><span id="line-41"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Nil</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679570291"><span class="annot"><span class="annottext">e :: FilePath
+</span><a href="#local-6989586621679570291"><span class="hs-identifier hs-var">e</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-identifier">_</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">CSVParseError -&gt; m ([Value], Records (HashMap Text Value))
+forall (m :: * -&gt; *) e a. (MonadThrow m, Exception e) =&gt; e -&gt; m a
+</span><span class="hs-identifier hs-var">throwM</span></span><span> </span><span class="annot"><span class="annottext">(CSVParseError -&gt; m ([Value], Records (HashMap Text Value)))
+-&gt; CSVParseError -&gt; m ([Value], Records (HashMap Text Value))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">FilePath -&gt; CSVParseError
+</span><a href="Runtime.Error.html#CSVParseError"><span class="hs-identifier hs-var">CSVParseError</span></a></span><span> </span><span class="annot"><span class="annottext">FilePath
+</span><a href="#local-6989586621679570291"><span class="hs-identifier hs-var">e</span></a></span><span>
+</span><span id="line-42"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Nil</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Nothing</span></span><span> </span><span id="local-6989586621679570290"><span class="annot"><span class="annottext">r :: ByteString
+</span><a href="#local-6989586621679570290"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">([Value], Records (HashMap Text Value))
+-&gt; m ([Value], Records (HashMap Text Value))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">[</span><span class="hs-special">]</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Maybe FilePath -&gt; ByteString -&gt; Records (HashMap Text Value)
+forall a. Maybe FilePath -&gt; ByteString -&gt; Records a
+</span><span class="hs-identifier hs-var">Nil</span></span><span> </span><span class="annot"><span class="annottext">Maybe FilePath
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679570290"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-43"></span><span class="annot"><a href="Parse.Csv.html#readCsvFileWithDelimiter"><span class="hs-identifier hs-var">readCsvFileWithDelimiter</span></a></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679570289"><span class="annot"><span class="annottext">delim :: Char
+</span><a href="#local-6989586621679570289"><span class="hs-identifier hs-var">delim</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679570288"><span class="annot"><span class="annottext">alts :: FilePath
+</span><a href="#local-6989586621679570288"><span class="hs-identifier hs-var">alts</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679570287"><span class="annot"><span class="annottext">inFile :: FilePath
+</span><a href="#local-6989586621679570287"><span class="hs-identifier hs-var">inFile</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-44"></span><span>  </span><span id="local-6989586621679570286"><span class="annot"><span class="annottext">Records [Text]
+</span><a href="#local-6989586621679570286"><span class="hs-identifier hs-var">rows</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO (Records [Text]) -&gt; m (Records [Text])
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">liftIO</span></span><span> </span><span class="annot"><span class="annottext">(IO (Records [Text]) -&gt; m (Records [Text]))
+-&gt; IO (Records [Text]) -&gt; m (Records [Text])
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">DecodeOptions -&gt; HasHeader -&gt; ByteString -&gt; Records [Text]
+forall a.
+FromRecord a =&gt;
+DecodeOptions -&gt; HasHeader -&gt; ByteString -&gt; Records a
+</span><span class="hs-identifier hs-var">decodeWith</span></span><span> </span><span class="annot"><span class="annottext">DecodeOptions
+</span><span class="hs-identifier hs-var">defaultDecodeOptions</span></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">decDelimiter :: Word8
+</span><span class="hs-identifier hs-var">decDelimiter</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Word8
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Char -&gt; Int
+</span><span class="hs-identifier hs-var">ord</span></span><span> </span><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679570289"><span class="hs-identifier hs-var">delim</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">}</span><span> </span><span class="annot"><span class="annottext">HasHeader
+</span><span class="hs-identifier hs-var">NoHeader</span></span><span> </span><span class="annot"><span class="annottext">(ByteString -&gt; Records [Text])
+-&gt; (ByteString -&gt; ByteString) -&gt; ByteString -&gt; Records [Text]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">ByteString -&gt; ByteString
+</span><a href="Parse.Csv.html#dropBOM"><span class="hs-identifier hs-var">dropBOM</span></a></span><span> </span><span class="annot"><span class="annottext">(ByteString -&gt; Records [Text])
+-&gt; IO ByteString -&gt; IO (Records [Text])
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">FilePath -&gt; IO ByteString
+</span><span class="hs-identifier hs-var">BS.readFile</span></span><span> </span><span class="annot"><span class="annottext">FilePath
+</span><a href="#local-6989586621679570287"><span class="hs-identifier hs-var">inFile</span></a></span><span>
+</span><span id="line-45"></span><span>  </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Records [Text]
+</span><a href="#local-6989586621679570286"><span class="hs-identifier hs-var">rows</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-46"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Cons</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Right</span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679570285"><span class="annot"><span class="annottext">[Text]
+</span><a href="#local-6989586621679570285"><span class="hs-identifier hs-var">h</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span class="hs-special">]</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span id="local-6989586621679570284"><span class="annot"><span class="annottext">rest :: Records [Text]
+</span><a href="#local-6989586621679570284"><span class="hs-identifier hs-var">rest</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span>
+</span><span id="line-47"></span><span>      </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">[Text] -&gt; Int
+forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Int
+</span><span class="hs-identifier hs-var">length</span></span><span> </span><span class="annot"><span class="annottext">[Text]
+</span><a href="#local-6989586621679570285"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&lt;</span></span><span> </span><span class="annot"><span class="hs-number">2</span></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">FilePath -&gt; FilePath -&gt; m ([Value], Records (HashMap Text Value))
+forall (m :: * -&gt; *).
+(MonadThrow m, MonadIO m) =&gt;
+FilePath -&gt; FilePath -&gt; m ([Value], Records (HashMap Text Value))
+</span><a href="Parse.Csv.html#readCsvFileWithDelimiter"><span class="hs-identifier hs-var">readCsvFileWithDelimiter</span></a></span><span> </span><span class="annot"><span class="annottext">FilePath
+</span><a href="#local-6989586621679570288"><span class="hs-identifier hs-var">alts</span></a></span><span> </span><span class="annot"><span class="annottext">FilePath
+</span><a href="#local-6989586621679570287"><span class="hs-identifier hs-var">inFile</span></a></span><span>
+</span><span id="line-48"></span><span>      </span><span class="hs-keyword">else</span><span> </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679570281"><span class="annot"><span class="annottext">header :: [Text]
+</span><a href="#local-6989586621679570281"><span class="hs-identifier hs-var hs-var">header</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Text] -&gt; [Text]
+forall (t :: * -&gt; *) a.
+(Traversable t, Ord a, Semigroup a, StringConv FilePath a) =&gt;
+t a -&gt; t a
+</span><a href="Parse.Utils.html#uniqueHeader"><span class="hs-identifier hs-var">uniqueHeader</span></a></span><span> </span><span class="annot"><span class="annottext">[Text]
+</span><a href="#local-6989586621679570285"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="hs-keyword">in</span><span> </span><span>
+</span><span id="line-49"></span><span>        </span><span class="annot"><span class="annottext">([Value], Records (HashMap Text Value))
+-&gt; m ([Value], Records (HashMap Text Value))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">((Text, Text) -&gt; Value) -&gt; [(Text, Text)] -&gt; [Value]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(Text -&gt; Text -&gt; Value) -&gt; (Text, Text) -&gt; Value
+forall a b c. (a -&gt; b -&gt; c) -&gt; (a, b) -&gt; c
+</span><span class="hs-identifier hs-var">uncurry</span></span><span> </span><span class="annot"><span class="annottext">Text -&gt; Text -&gt; Value
+</span><a href="Parse.Utils.html#unifyHeader"><span class="hs-identifier hs-var">unifyHeader</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">([(Text, Text)] -&gt; [Value]) -&gt; [(Text, Text)] -&gt; [Value]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Text] -&gt; [Text] -&gt; [(Text, Text)]
+forall a b. [a] -&gt; [b] -&gt; [(a, b)]
+</span><span class="hs-identifier hs-var">zip</span></span><span> </span><span class="annot"><span class="annottext">[Text]
+</span><a href="#local-6989586621679570281"><span class="hs-identifier hs-var">header</span></a></span><span> </span><span class="annot"><span class="annottext">[Text]
+</span><a href="#local-6989586621679570285"><span class="hs-identifier hs-var">h</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">([Text] -&gt; HashMap Text Value)
+-&gt; Records [Text] -&gt; Records (HashMap Text Value)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679570280"><span class="annot"><span class="annottext">r :: [Text]
+</span><a href="#local-6989586621679570280"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[(Text, Value)] -&gt; HashMap Text Value
+forall k v. (Eq k, Hashable k) =&gt; [(k, v)] -&gt; HashMap k v
+</span><span class="hs-identifier hs-var">HM.fromList</span></span><span> </span><span class="annot"><span class="annottext">([(Text, Value)] -&gt; HashMap Text Value)
+-&gt; [(Text, Value)] -&gt; HashMap Text Value
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Text] -&gt; [Value] -&gt; [(Text, Value)]
+forall a b. [a] -&gt; [b] -&gt; [(a, b)]
+</span><span class="hs-identifier hs-var">zip</span></span><span> </span><span class="annot"><span class="annottext">[Text]
+</span><a href="#local-6989586621679570281"><span class="hs-identifier hs-var">header</span></a></span><span> </span><span class="annot"><span class="annottext">([Value] -&gt; [(Text, Value)]) -&gt; [Value] -&gt; [(Text, Value)]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Text -&gt; Value) -&gt; [Text] -&gt; [Value]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">Text -&gt; Value
+forall a. ToJSON a =&gt; a -&gt; Value
+</span><span class="hs-identifier hs-var">JSON.toJSON</span></span><span> </span><span class="annot"><span class="annottext">[Text]
+</span><a href="#local-6989586621679570280"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Records [Text]
+</span><a href="#local-6989586621679570284"><span class="hs-identifier hs-var">rest</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-50"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Cons</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Left</span></span><span> </span><span id="local-6989586621679570279"><span class="annot"><span class="annottext">e :: FilePath
+</span><a href="#local-6989586621679570279"><span class="hs-identifier hs-var">e</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-identifier">_</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">CSVParseError -&gt; m ([Value], Records (HashMap Text Value))
+forall (m :: * -&gt; *) e a. (MonadThrow m, Exception e) =&gt; e -&gt; m a
+</span><span class="hs-identifier hs-var">throwM</span></span><span> </span><span class="annot"><span class="annottext">(CSVParseError -&gt; m ([Value], Records (HashMap Text Value)))
+-&gt; CSVParseError -&gt; m ([Value], Records (HashMap Text Value))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">FilePath -&gt; CSVParseError
+</span><a href="Runtime.Error.html#CSVParseError"><span class="hs-identifier hs-var">CSVParseError</span></a></span><span> </span><span class="annot"><span class="annottext">FilePath
+</span><a href="#local-6989586621679570279"><span class="hs-identifier hs-var">e</span></a></span><span>
+</span><span id="line-51"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Nil</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679570278"><span class="annot"><span class="annottext">e :: FilePath
+</span><a href="#local-6989586621679570278"><span class="hs-identifier hs-var">e</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-identifier">_</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">CSVParseError -&gt; m ([Value], Records (HashMap Text Value))
+forall (m :: * -&gt; *) e a. (MonadThrow m, Exception e) =&gt; e -&gt; m a
+</span><span class="hs-identifier hs-var">throwM</span></span><span> </span><span class="annot"><span class="annottext">(CSVParseError -&gt; m ([Value], Records (HashMap Text Value)))
+-&gt; CSVParseError -&gt; m ([Value], Records (HashMap Text Value))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">FilePath -&gt; CSVParseError
+</span><a href="Runtime.Error.html#CSVParseError"><span class="hs-identifier hs-var">CSVParseError</span></a></span><span> </span><span class="annot"><span class="annottext">FilePath
+</span><a href="#local-6989586621679570278"><span class="hs-identifier hs-var">e</span></a></span><span>
+</span><span id="line-52"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Nil</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Nothing</span></span><span> </span><span id="local-6989586621679570277"><span class="annot"><span class="annottext">r :: ByteString
+</span><a href="#local-6989586621679570277"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">([Value], Records (HashMap Text Value))
+-&gt; m ([Value], Records (HashMap Text Value))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">[</span><span class="hs-special">]</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Maybe FilePath -&gt; ByteString -&gt; Records (HashMap Text Value)
+forall a. Maybe FilePath -&gt; ByteString -&gt; Records a
+</span><span class="hs-identifier hs-var">Nil</span></span><span> </span><span class="annot"><span class="annottext">Maybe FilePath
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679570277"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span></pre></body></html>

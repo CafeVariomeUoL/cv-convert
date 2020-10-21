@@ -1,0 +1,132 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">DB.Utils</span><span class="hs-special">(</span><span class="annot"><a href="DB.Utils.html#parseConnString"><span class="hs-identifier">parseConnString</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-2"></span><span>
+</span><span id="line-3"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.List</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">elemIndex</span></span><span class="hs-special">)</span><span>
+</span><span id="line-4"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Network.URI</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">uriPort</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">URIAuth</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">parseURI</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">uriScheme</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">uriPath</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">uriAuthority</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">uriUserInfo</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">uriRegName</span></span><span class="hs-special">)</span><span>
+</span><span id="line-5"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="DB.Types.html"><span class="hs-identifier">DB.Types</span></a></span><span>
+</span><span id="line-6"></span><span>
+</span><span id="line-7"></span><span>
+</span><span id="line-8"></span><span class="annot"><a href="DB.Utils.html#parseAuthString"><span class="hs-identifier hs-type">parseAuthString</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">URIAuth</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="DB.Types.html#User"><span class="hs-identifier hs-type">User</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="DB.Types.html#Password"><span class="hs-identifier hs-type">Password</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="DB.Types.html#Host"><span class="hs-identifier hs-type">Host</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="DB.Types.html#Port"><span class="hs-identifier hs-type">Port</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-9"></span><span id="parseAuthString"><span class="annot"><span class="annottext">parseAuthString :: Maybe URIAuth -&gt; Maybe (User, Password, Host, Port)
+</span><a href="DB.Utils.html#parseAuthString"><span class="hs-identifier hs-var hs-var">parseAuthString</span></a></span></span><span> </span><span id="local-6989586621679569099"><span class="annot"><span class="annottext">mas :: Maybe URIAuth
+</span><a href="#local-6989586621679569099"><span class="hs-identifier hs-var">mas</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>  </span><span class="hs-keyword">do</span><span> </span><span>
+</span><span id="line-10"></span><span>  </span><span id="local-6989586621679569098"><span class="annot"><span class="annottext">URIAuth
+</span><a href="#local-6989586621679569098"><span class="hs-keyword hs-var">as</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Maybe URIAuth
+</span><a href="#local-6989586621679569099"><span class="hs-identifier hs-var">mas</span></a></span><span>
+</span><span id="line-11"></span><span>  </span><span id="local-6989586621679569097"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679569097"><span class="hs-identifier hs-var">i</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Char -&gt; [Char] -&gt; Maybe Int
+forall a. Eq a =&gt; a -&gt; [a] -&gt; Maybe Int
+</span><span class="hs-identifier hs-var">elemIndex</span></span><span> </span><span class="annot"><span class="hs-char">':'</span></span><span> </span><span class="annot"><span class="annottext">([Char] -&gt; Maybe Int) -&gt; [Char] -&gt; Maybe Int
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">URIAuth -&gt; [Char]
+</span><span class="hs-identifier hs-var hs-var">uriUserInfo</span></span><span> </span><span class="annot"><span class="annottext">URIAuth
+</span><a href="#local-6989586621679569098"><span class="hs-keyword hs-var">as</span></a></span><span>
+</span><span id="line-12"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679569096"><span class="annot"><span class="annottext">user :: [Char]
+</span><a href="#local-6989586621679569096"><span class="hs-identifier hs-var">user</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679569095"><span class="annot"><span class="annottext">pass :: [Char]
+</span><a href="#local-6989586621679569095"><span class="hs-identifier hs-var">pass</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; [Char] -&gt; ([Char], [Char])
+forall a. Int -&gt; [a] -&gt; ([a], [a])
+</span><span class="hs-identifier hs-var">splitAt</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679569097"><span class="hs-identifier hs-var">i</span></a></span><span> </span><span class="annot"><span class="annottext">([Char] -&gt; ([Char], [Char])) -&gt; [Char] -&gt; ([Char], [Char])
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">URIAuth -&gt; [Char]
+</span><span class="hs-identifier hs-var hs-var">uriUserInfo</span></span><span> </span><span class="annot"><span class="annottext">URIAuth
+</span><a href="#local-6989586621679569098"><span class="hs-keyword hs-var">as</span></a></span><span>
+</span><span id="line-13"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679569093"><span class="annot"><span class="annottext">host :: [Char]
+</span><a href="#local-6989586621679569093"><span class="hs-identifier hs-var hs-var">host</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">URIAuth -&gt; [Char]
+</span><span class="hs-identifier hs-var hs-var">uriRegName</span></span><span> </span><span class="annot"><span class="annottext">URIAuth
+</span><a href="#local-6989586621679569098"><span class="hs-keyword hs-var">as</span></a></span><span>
+</span><span id="line-14"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679569092"><span class="annot"><span class="annottext">port :: [Char]
+</span><a href="#local-6989586621679569092"><span class="hs-identifier hs-var hs-var">port</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; [Char] -&gt; [Char]
+forall a. Int -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">drop</span></span><span> </span><span class="annot"><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">([Char] -&gt; [Char]) -&gt; [Char] -&gt; [Char]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">URIAuth -&gt; [Char]
+</span><span class="hs-identifier hs-var hs-var">uriPort</span></span><span> </span><span class="annot"><span class="annottext">URIAuth
+</span><a href="#local-6989586621679569098"><span class="hs-keyword hs-var">as</span></a></span><span>
+</span><span id="line-15"></span><span>  </span><span class="annot"><span class="annottext">(User, Password, Host, Port) -&gt; Maybe (User, Password, Host, Port)
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Char] -&gt; User
+</span><a href="DB.Types.html#User"><span class="hs-identifier hs-var">User</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679569096"><span class="hs-identifier hs-var">user</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Password
+</span><a href="DB.Types.html#Password"><span class="hs-identifier hs-var">Password</span></a></span><span> </span><span class="annot"><span class="annottext">([Char] -&gt; Password) -&gt; [Char] -&gt; Password
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char]
+forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">init</span></span><span> </span><span class="annot"><span class="annottext">([Char] -&gt; [Char]) -&gt; [Char] -&gt; [Char]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char]
+forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">tail</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679569095"><span class="hs-identifier hs-var">pass</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Host
+</span><a href="DB.Types.html#Host"><span class="hs-identifier hs-var">Host</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679569093"><span class="hs-identifier hs-var">host</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Maybe [Char] -&gt; Port
+</span><a href="DB.Types.html#Port"><span class="hs-identifier hs-var">Port</span></a></span><span> </span><span class="annot"><span class="annottext">(Maybe [Char] -&gt; Port) -&gt; Maybe [Char] -&gt; Port
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Int
+forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Int
+</span><span class="hs-identifier hs-var">length</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679569092"><span class="hs-identifier hs-var">port</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&gt;</span></span><span> </span><span class="annot"><span class="hs-number">0</span></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Maybe [Char]
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679569092"><span class="hs-identifier hs-var">port</span></a></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">Maybe [Char]
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span class="hs-special">)</span><span>
+</span><span id="line-16"></span><span>
+</span><span id="line-17"></span><span>
+</span><span id="line-18"></span><span class="annot"><a href="DB.Utils.html#parseConnString"><span class="hs-identifier hs-type">parseConnString</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="DB.Types.html#User"><span class="hs-identifier hs-type">User</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="DB.Types.html#Password"><span class="hs-identifier hs-type">Password</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="DB.Types.html#Host"><span class="hs-identifier hs-type">Host</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="DB.Types.html#Port"><span class="hs-identifier hs-type">Port</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="DB.Types.html#Database"><span class="hs-identifier hs-type">Database</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-19"></span><span id="parseConnString"><span class="annot"><span class="annottext">parseConnString :: [Char] -&gt; Maybe ([Char], User, Password, Host, Port, Database)
+</span><a href="DB.Utils.html#parseConnString"><span class="hs-identifier hs-var hs-var">parseConnString</span></a></span></span><span> </span><span id="local-6989586621679569081"><span class="annot"><span class="annottext">cs :: [Char]
+</span><a href="#local-6989586621679569081"><span class="hs-identifier hs-var">cs</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-20"></span><span>  </span><span id="local-6989586621679569080"><span class="annot"><span class="annottext">URI
+</span><a href="#local-6989586621679569080"><span class="hs-identifier hs-var">uri</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Maybe URI
+</span><span class="hs-identifier hs-var">parseURI</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679569081"><span class="hs-identifier hs-var">cs</span></a></span><span>
+</span><span id="line-21"></span><span>  </span><span id="local-6989586621679569079"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679569079"><span class="hs-identifier hs-var">db</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Maybe [Char]
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">([Char] -&gt; Maybe [Char]) -&gt; [Char] -&gt; Maybe [Char]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char]
+forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">init</span></span><span> </span><span class="annot"><span class="annottext">([Char] -&gt; [Char]) -&gt; [Char] -&gt; [Char]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">URI -&gt; [Char]
+</span><span class="hs-identifier hs-var hs-var">uriScheme</span></span><span> </span><span class="annot"><span class="annottext">URI
+</span><a href="#local-6989586621679569080"><span class="hs-identifier hs-var">uri</span></a></span><span>
+</span><span id="line-22"></span><span>  </span><span id="local-6989586621679569078"><span class="annot"><span class="annottext">Database
+</span><a href="#local-6989586621679569078"><span class="hs-identifier hs-var">path</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Database -&gt; Maybe Database
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Database -&gt; Maybe Database) -&gt; Database -&gt; Maybe Database
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; Database
+</span><a href="DB.Types.html#Database"><span class="hs-identifier hs-var">Database</span></a></span><span> </span><span class="annot"><span class="annottext">([Char] -&gt; Database) -&gt; [Char] -&gt; Database
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; [Char] -&gt; [Char]
+forall a. Int -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">drop</span></span><span> </span><span class="annot"><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">([Char] -&gt; [Char]) -&gt; [Char] -&gt; [Char]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">URI -&gt; [Char]
+</span><span class="hs-identifier hs-var hs-var">uriPath</span></span><span> </span><span class="annot"><span class="annottext">URI
+</span><a href="#local-6989586621679569080"><span class="hs-identifier hs-var">uri</span></a></span><span>
+</span><span id="line-23"></span><span>  </span><span class="hs-special">(</span><span id="local-6989586621679569076"><span class="annot"><span class="annottext">user :: User
+</span><a href="#local-6989586621679569076"><span class="hs-identifier hs-var">user</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679569075"><span class="annot"><span class="annottext">pass :: Password
+</span><a href="#local-6989586621679569075"><span class="hs-identifier hs-var">pass</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679569074"><span class="annot"><span class="annottext">host :: Host
+</span><a href="#local-6989586621679569074"><span class="hs-identifier hs-var">host</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679569073"><span class="annot"><span class="annottext">port :: Port
+</span><a href="#local-6989586621679569073"><span class="hs-identifier hs-var">port</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Maybe URIAuth -&gt; Maybe (User, Password, Host, Port)
+</span><a href="DB.Utils.html#parseAuthString"><span class="hs-identifier hs-var">parseAuthString</span></a></span><span> </span><span class="annot"><span class="annottext">(Maybe URIAuth -&gt; Maybe (User, Password, Host, Port))
+-&gt; Maybe URIAuth -&gt; Maybe (User, Password, Host, Port)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">URI -&gt; Maybe URIAuth
+</span><span class="hs-identifier hs-var hs-var">uriAuthority</span></span><span> </span><span class="annot"><span class="annottext">URI
+</span><a href="#local-6989586621679569080"><span class="hs-identifier hs-var">uri</span></a></span><span>
+</span><span id="line-24"></span><span>  </span><span class="annot"><span class="annottext">([Char], User, Password, Host, Port, Database)
+-&gt; Maybe ([Char], User, Password, Host, Port, Database)
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679569079"><span class="hs-identifier hs-var">db</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">User
+</span><a href="#local-6989586621679569076"><span class="hs-identifier hs-var">user</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Password
+</span><a href="#local-6989586621679569075"><span class="hs-identifier hs-var">pass</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Host
+</span><a href="#local-6989586621679569074"><span class="hs-identifier hs-var">host</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Port
+</span><a href="#local-6989586621679569073"><span class="hs-identifier hs-var">port</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Database
+</span><a href="#local-6989586621679569078"><span class="hs-identifier hs-var">path</span></a></span><span class="hs-special">)</span></pre></body></html>

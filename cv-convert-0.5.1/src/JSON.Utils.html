@@ -1,0 +1,469 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE KindSignatures, DataKinds, StandaloneDeriving, GADTs #-}</span><span>
+</span><span id="line-2"></span><span class="hs-comment">{-|
+Module      : JSON.Utils
+Description : Utilities for working with JSON records
+Copyright   : (c) Samuel Balco, 2020
+License     : MIT
+Maintainer  : sam@definitelynotspam.email
+
+-}</span><span>
+</span><span id="line-10"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">JSON.Utils</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-11"></span><span>
+</span><span id="line-12"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Aeson</span></span><span>            </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Value</span></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">encode</span></span><span class="hs-special">)</span><span>
+</span><span id="line-13"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Text</span></span><span>             </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Text</span></span><span class="hs-special">)</span><span>
+</span><span id="line-14"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.String.Conv</span></span><span>      </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">toS</span></span><span class="hs-special">)</span><span>
+</span><span id="line-15"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.HashMap.Strict</span></span><span>   </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">HM</span></span><span>
+</span><span id="line-16"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.HashSet</span></span><span>          </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">S</span></span><span>
+</span><span id="line-17"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Vector</span></span><span>           </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">V</span></span><span>
+</span><span id="line-18"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Scientific</span></span><span>       </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">isInteger</span></span><span class="hs-special">)</span><span>
+</span><span id="line-19"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.UUID</span></span><span>             </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">UUID</span></span><span>
+</span><span id="line-20"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.UUID.V4</span></span><span>          </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">UUID</span></span><span>
+</span><span id="line-21"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Monad.IO.Class</span></span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">MonadIO</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">liftIO</span></span><span class="hs-special">)</span><span>
+</span><span id="line-22"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Monad.Catch</span></span><span>   </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">MonadThrow</span></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-23"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Foldable</span></span><span>         </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">foldlM</span></span><span class="hs-special">)</span><span>
+</span><span id="line-24"></span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Runtime.Error.html"><span class="hs-identifier">Runtime.Error</span></a></span><span>         </span><span class="hs-special">(</span><span class="annot"><a href="Runtime.Error.html#SubjectIDNotFound"><span class="hs-identifier">SubjectIDNotFound</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Quickjs.Error</span></span><span>         </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">InternalError</span></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="DB.html"><span class="hs-identifier">DB</span></a></span><span>                    </span><span class="hs-special">(</span><span class="annot"><a href="DB.Types.html#SubjectID"><span class="hs-identifier">SubjectID</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-28"></span><span>
+</span><span id="line-29"></span><span>
+</span><span id="line-30"></span><span id="local-6989586621679570536"><span class="annot"><a href="JSON.Utils.html#getSubjectID"><span class="hs-identifier hs-type">getSubjectID</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">MonadThrow</span></span><span> </span><span class="annot"><a href="#local-6989586621679570536"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Value</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679570536"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="DB.Types.html#SubjectID"><span class="hs-identifier hs-type">SubjectID</span></a></span></span><span>
+</span><span id="line-31"></span><span id="getSubjectID"><span class="annot"><span class="annottext">getSubjectID :: Value -&gt; m SubjectID
+</span><a href="JSON.Utils.html#getSubjectID"><span class="hs-identifier hs-var hs-var">getSubjectID</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Object</span></span><span> </span><span id="local-6989586621679570533"><span class="annot"><span class="annottext">m :: Object
+</span><a href="#local-6989586621679570533"><span class="hs-identifier hs-var">m</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Text -&gt; Object -&gt; Maybe Value
+forall k v. (Eq k, Hashable k) =&gt; k -&gt; HashMap k v -&gt; Maybe v
+</span><span class="hs-identifier hs-var">HM.lookup</span></span><span> </span><span class="annot"><span class="hs-string">&quot;subject_id&quot;</span></span><span> </span><span class="annot"><span class="annottext">Object
+</span><a href="#local-6989586621679570533"><span class="hs-identifier hs-var">m</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-32"></span><span>  </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span id="local-6989586621679570530"><span class="annot"><span class="annottext">x :: Text
+</span><a href="#local-6989586621679570530"><span class="hs-identifier hs-var">x</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">SubjectID -&gt; m SubjectID
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(SubjectID -&gt; m SubjectID) -&gt; SubjectID -&gt; m SubjectID
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; SubjectID
+</span><a href="DB.Types.html#SubjectID"><span class="hs-identifier hs-var">SubjectID</span></a></span><span> </span><span class="annot"><span class="annottext">(String -&gt; SubjectID) -&gt; String -&gt; SubjectID
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Text -&gt; String
+forall a b. StringConv a b =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">toS</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679570530"><span class="hs-identifier hs-var">x</span></a></span><span>
+</span><span id="line-33"></span><span>  </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679570528"><span class="annot"><span class="annottext">x :: Value
+</span><a href="#local-6989586621679570528"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">SubjectID -&gt; m SubjectID
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(SubjectID -&gt; m SubjectID) -&gt; SubjectID -&gt; m SubjectID
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; SubjectID
+</span><a href="DB.Types.html#SubjectID"><span class="hs-identifier hs-var">SubjectID</span></a></span><span> </span><span class="annot"><span class="annottext">(String -&gt; SubjectID) -&gt; String -&gt; SubjectID
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">ByteString -&gt; String
+forall a b. StringConv a b =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">toS</span></span><span> </span><span class="annot"><span class="annottext">(ByteString -&gt; String) -&gt; ByteString -&gt; String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Value -&gt; ByteString
+forall a. ToJSON a =&gt; a -&gt; ByteString
+</span><span class="hs-identifier hs-var">encode</span></span><span> </span><span class="annot"><span class="annottext">Value
+</span><a href="#local-6989586621679570528"><span class="hs-identifier hs-var">x</span></a></span><span>
+</span><span id="line-34"></span><span>  </span><span class="annot"><span class="hs-identifier hs-type">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span>  </span><span class="annot"><span class="annottext">SubjectIDNotFound -&gt; m SubjectID
+forall (m :: * -&gt; *) e a. (MonadThrow m, Exception e) =&gt; e -&gt; m a
+</span><span class="hs-identifier hs-var">throwM</span></span><span> </span><span class="annot"><span class="annottext">(SubjectIDNotFound -&gt; m SubjectID)
+-&gt; SubjectIDNotFound -&gt; m SubjectID
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">SubjectIDNotFound
+</span><a href="Runtime.Error.html#SubjectIDNotFound"><span class="hs-identifier hs-var">SubjectIDNotFound</span></a></span><span>
+</span><span id="line-35"></span><span class="annot"><a href="JSON.Utils.html#getSubjectID"><span class="hs-identifier hs-var">getSubjectID</span></a></span><span> </span><span id="local-6989586621679570525"><span class="annot"><span class="annottext">o :: Value
+</span><a href="#local-6989586621679570525"><span class="hs-identifier hs-var">o</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">InternalError -&gt; m SubjectID
+forall (m :: * -&gt; *) e a. (MonadThrow m, Exception e) =&gt; e -&gt; m a
+</span><span class="hs-identifier hs-var">throwM</span></span><span> </span><span class="annot"><span class="annottext">(InternalError -&gt; m SubjectID) -&gt; InternalError -&gt; m SubjectID
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Text -&gt; InternalError
+</span><span class="hs-identifier hs-var">InternalError</span></span><span> </span><span class="annot"><span class="annottext">(Text -&gt; InternalError) -&gt; Text -&gt; InternalError
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="hs-string">&quot;Expected &quot;</span></span><span> </span><span class="annot"><span class="annottext">Text -&gt; Text -&gt; Text
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">ByteString -&gt; Text
+forall a b. StringConv a b =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">toS</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Value -&gt; ByteString
+forall a. ToJSON a =&gt; a -&gt; ByteString
+</span><span class="hs-identifier hs-var">encode</span></span><span> </span><span class="annot"><span class="annottext">Value
+</span><a href="#local-6989586621679570525"><span class="hs-identifier hs-var">o</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Text -&gt; Text -&gt; Text
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="hs-string">&quot; to be an object.&quot;</span></span><span>
+</span><span id="line-36"></span><span>
+</span><span id="line-37"></span><span>
+</span><span id="line-38"></span><span class="hs-comment">{-|
+This function takes a JSON object and generates all paths to the leaf nodes, collecting all the leaf values in a set. E.g. given:
+
+&gt;{
+&gt;  &quot;name&quot;: &quot;Sam&quot;,
+&gt;  &quot;age&quot;: 25.5,
+&gt;  &quot;address&quot;: {
+&gt;    &quot;street&quot;: &quot;Middle&quot;,
+&gt;    &quot;house_no&quot;: 26,
+&gt;    &quot;city&quot;: &quot;Towcester&quot;
+&gt;  }
+&gt;}
+
+'createAllPathsWithValues' produces the following map:
+
+&gt;{&quot;name&quot;: &quot;str&quot;} -&gt; {&quot;Sam&quot;},
+&gt;{&quot;age&quot;: &quot;float&quot;} -&gt; {25.5},
+&gt;{&quot;address&quot;: {&quot;street&quot;: &quot;str&quot;}} -&gt; {&quot;Middle&quot;},
+&gt;{&quot;address&quot;: {&quot;house_no&quot;: &quot;int&quot;}} -&gt; {26},
+&gt;{&quot;address&quot;: {&quot;city&quot;: &quot;str&quot;}} -&gt; {&quot;Towcester&quot;}
+
+We return a set of value, in case we encounter the same path at in different objects within the same array:
+
+&gt;[
+&gt;  {&quot;name&quot;: &quot;Alice&quot;, &quot;age&quot;: 27}
+&gt;  {&quot;name&quot;: &quot;John&quot;, &quot;age&quot;: 25},
+&gt;]
+
+
+Here, 'createAllPathsWithValues' outputs:
+
+&gt;[{&quot;name&quot;: &quot;str&quot;}] -&gt; {&quot;Alice&quot;, &quot;John&quot;},
+&gt;[{&quot;age&quot;: &quot;int&quot;}] -&gt; {27, 25},
+
+-}</span><span>
+</span><span id="line-73"></span><span class="annot"><a href="JSON.Utils.html#createAllPathsWithValues"><span class="hs-identifier hs-type">createAllPathsWithValues</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Value</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">HM.HashMap</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Value</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">S.HashSet</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Value</span></span><span class="hs-special">)</span><span>
+</span><span id="line-74"></span><span id="createAllPathsWithValues"><span class="annot"><span class="annottext">createAllPathsWithValues :: Value -&gt; HashMap Value (HashSet Value)
+</span><a href="JSON.Utils.html#createAllPathsWithValues"><span class="hs-identifier hs-var hs-var">createAllPathsWithValues</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Object</span></span><span> </span><span id="local-6989586621679570522"><span class="annot"><span class="annottext">o :: Object
+</span><a href="#local-6989586621679570522"><span class="hs-identifier hs-var">o</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span>
+</span><span id="line-75"></span><span>  </span><span class="annot"><span class="annottext">(HashMap Value (HashSet Value)
+ -&gt; Text -&gt; Value -&gt; HashMap Value (HashSet Value))
+-&gt; HashMap Value (HashSet Value)
+-&gt; Object
+-&gt; HashMap Value (HashSet Value)
+forall a k v. (a -&gt; k -&gt; v -&gt; a) -&gt; a -&gt; HashMap k v -&gt; a
+</span><span class="hs-identifier hs-var">HM.foldlWithKey'</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679570520"><span class="annot"><span class="annottext">acc :: HashMap Value (HashSet Value)
+</span><a href="#local-6989586621679570520"><span class="hs-identifier hs-var">acc</span></a></span></span><span> </span><span id="local-6989586621679570519"><span class="annot"><span class="annottext">k :: Text
+</span><a href="#local-6989586621679570519"><span class="hs-identifier hs-var">k</span></a></span></span><span> </span><span id="local-6989586621679570518"><span class="annot"><span class="annottext">v :: Value
+</span><a href="#local-6989586621679570518"><span class="hs-identifier hs-var">v</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span>
+</span><span id="line-76"></span><span>      </span><span class="annot"><span class="annottext">(HashSet Value -&gt; HashSet Value -&gt; HashSet Value)
+-&gt; HashMap Value (HashSet Value)
+-&gt; HashMap Value (HashSet Value)
+-&gt; HashMap Value (HashSet Value)
+forall k v.
+(Eq k, Hashable k) =&gt;
+(v -&gt; v -&gt; v) -&gt; HashMap k v -&gt; HashMap k v -&gt; HashMap k v
+</span><span class="hs-identifier hs-var">HM.unionWith</span></span><span>
+</span><span id="line-77"></span><span>        </span><span class="hs-special">(</span><span class="annot"><span class="annottext">HashSet Value -&gt; HashSet Value -&gt; HashSet Value
+forall a. (Eq a, Hashable a) =&gt; HashSet a -&gt; HashSet a -&gt; HashSet a
+</span><span class="hs-identifier hs-var">S.union</span></span><span class="hs-special">)</span><span>
+</span><span id="line-78"></span><span>        </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(HashMap Value (HashSet Value)
+ -&gt; Value -&gt; HashSet Value -&gt; HashMap Value (HashSet Value))
+-&gt; HashMap Value (HashSet Value)
+-&gt; HashMap Value (HashSet Value)
+-&gt; HashMap Value (HashSet Value)
+forall a k v. (a -&gt; k -&gt; v -&gt; a) -&gt; a -&gt; HashMap k v -&gt; a
+</span><span class="hs-identifier hs-var">HM.foldlWithKey'</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679570515"><span class="annot"><span class="annottext">acc' :: HashMap Value (HashSet Value)
+</span><a href="#local-6989586621679570515"><span class="hs-identifier hs-var">acc'</span></a></span></span><span> </span><span id="local-6989586621679570514"><span class="annot"><span class="annottext">k' :: Value
+</span><a href="#local-6989586621679570514"><span class="hs-identifier hs-var">k'</span></a></span></span><span> </span><span id="local-6989586621679570513"><span class="annot"><span class="annottext">v' :: HashSet Value
+</span><a href="#local-6989586621679570513"><span class="hs-identifier hs-var">v'</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Value
+-&gt; HashSet Value
+-&gt; HashMap Value (HashSet Value)
+-&gt; HashMap Value (HashSet Value)
+forall k v.
+(Eq k, Hashable k) =&gt;
+k -&gt; v -&gt; HashMap k v -&gt; HashMap k v
+</span><span class="hs-identifier hs-var">HM.insert</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Object -&gt; Value
+</span><span class="hs-identifier hs-var">Object</span></span><span> </span><span class="annot"><span class="annottext">(Object -&gt; Value) -&gt; Object -&gt; Value
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[(Text, Value)] -&gt; Object
+forall k v. (Eq k, Hashable k) =&gt; [(k, v)] -&gt; HashMap k v
+</span><span class="hs-identifier hs-var">HM.fromList</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679570519"><span class="hs-identifier hs-var">k</span></a></span><span class="hs-special">,</span><span class="annot"><span class="annottext">Value
+</span><a href="#local-6989586621679570514"><span class="hs-identifier hs-var">k'</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">HashSet Value
+</span><a href="#local-6989586621679570513"><span class="hs-identifier hs-var">v'</span></a></span><span> </span><span class="annot"><span class="annottext">HashMap Value (HashSet Value)
+</span><a href="#local-6989586621679570515"><span class="hs-identifier hs-var">acc'</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">HashMap Value (HashSet Value)
+forall k v. HashMap k v
+</span><span class="hs-identifier hs-var">HM.empty</span></span><span> </span><span class="annot"><span class="annottext">(HashMap Value (HashSet Value) -&gt; HashMap Value (HashSet Value))
+-&gt; HashMap Value (HashSet Value) -&gt; HashMap Value (HashSet Value)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Value -&gt; HashMap Value (HashSet Value)
+</span><a href="JSON.Utils.html#createAllPathsWithValues"><span class="hs-identifier hs-var">createAllPathsWithValues</span></a></span><span> </span><span class="annot"><span class="annottext">Value
+</span><a href="#local-6989586621679570518"><span class="hs-identifier hs-var">v</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-79"></span><span>        </span><span class="annot"><span class="annottext">HashMap Value (HashSet Value)
+</span><a href="#local-6989586621679570520"><span class="hs-identifier hs-var">acc</span></a></span><span>
+</span><span id="line-80"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">HashMap Value (HashSet Value)
+forall k v. HashMap k v
+</span><span class="hs-identifier hs-var">HM.empty</span></span><span> </span><span class="annot"><span class="annottext">Object
+</span><a href="#local-6989586621679570522"><span class="hs-identifier hs-var">o</span></a></span><span>
+</span><span id="line-81"></span><span class="annot"><a href="JSON.Utils.html#createAllPathsWithValues"><span class="hs-identifier hs-var">createAllPathsWithValues</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Array</span></span><span> </span><span id="local-6989586621679570508"><span class="annot"><span class="annottext">a :: Array
+</span><a href="#local-6989586621679570508"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(HashMap Value (HashSet Value)
+ -&gt; Value -&gt; HashMap Value (HashSet Value))
+-&gt; HashMap Value (HashSet Value)
+-&gt; Array
+-&gt; HashMap Value (HashSet Value)
+forall a b. (a -&gt; b -&gt; a) -&gt; a -&gt; Vector b -&gt; a
+</span><span class="hs-identifier hs-var">V.foldl'</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679570506"><span class="annot"><span class="annottext">acc :: HashMap Value (HashSet Value)
+</span><a href="#local-6989586621679570506"><span class="hs-identifier hs-var">acc</span></a></span></span><span> </span><span id="local-6989586621679570505"><span class="annot"><span class="annottext">v :: Value
+</span><a href="#local-6989586621679570505"><span class="hs-identifier hs-var">v</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span>
+</span><span id="line-82"></span><span>      </span><span class="annot"><span class="annottext">(HashSet Value -&gt; HashSet Value -&gt; HashSet Value)
+-&gt; HashMap Value (HashSet Value)
+-&gt; HashMap Value (HashSet Value)
+-&gt; HashMap Value (HashSet Value)
+forall k v.
+(Eq k, Hashable k) =&gt;
+(v -&gt; v -&gt; v) -&gt; HashMap k v -&gt; HashMap k v -&gt; HashMap k v
+</span><span class="hs-identifier hs-var">HM.unionWith</span></span><span>
+</span><span id="line-83"></span><span>        </span><span class="hs-special">(</span><span class="annot"><span class="annottext">HashSet Value -&gt; HashSet Value -&gt; HashSet Value
+forall a. (Eq a, Hashable a) =&gt; HashSet a -&gt; HashSet a -&gt; HashSet a
+</span><span class="hs-identifier hs-var">S.union</span></span><span class="hs-special">)</span><span>
+</span><span id="line-84"></span><span>        </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Value -&gt; HashMap Value (HashSet Value)
+</span><a href="JSON.Utils.html#createAllPathsWithValues"><span class="hs-identifier hs-var">createAllPathsWithValues</span></a></span><span> </span><span class="annot"><span class="annottext">Value
+</span><a href="#local-6989586621679570505"><span class="hs-identifier hs-var">v</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-85"></span><span>        </span><span class="annot"><span class="annottext">HashMap Value (HashSet Value)
+</span><a href="#local-6989586621679570506"><span class="hs-identifier hs-var">acc</span></a></span><span>
+</span><span id="line-86"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">HashMap Value (HashSet Value)
+forall k v. HashMap k v
+</span><span class="hs-identifier hs-var">HM.empty</span></span><span> </span><span class="annot"><span class="annottext">Array
+</span><a href="#local-6989586621679570508"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-87"></span><span class="annot"><a href="JSON.Utils.html#createAllPathsWithValues"><span class="hs-identifier hs-var">createAllPathsWithValues</span></a></span><span> </span><span id="local-6989586621679570504"><span class="annot"><span class="annottext">o :: Value
+</span><a href="#local-6989586621679570504"><span class="hs-identifier hs-var">o</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-identifier">_</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Value -&gt; HashSet Value -&gt; HashMap Value (HashSet Value)
+forall k v. Hashable k =&gt; k -&gt; v -&gt; HashMap k v
+</span><span class="hs-identifier hs-var">HM.singleton</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Text -&gt; Value
+</span><span class="hs-identifier hs-var">String</span></span><span> </span><span class="annot"><span class="hs-string">&quot;str&quot;</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Value -&gt; HashSet Value
+forall a. Hashable a =&gt; a -&gt; HashSet a
+</span><span class="hs-identifier hs-var">S.singleton</span></span><span> </span><span class="annot"><span class="annottext">Value
+</span><a href="#local-6989586621679570504"><span class="hs-identifier hs-var">o</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-88"></span><span class="annot"><a href="JSON.Utils.html#createAllPathsWithValues"><span class="hs-identifier hs-var">createAllPathsWithValues</span></a></span><span> </span><span id="local-6989586621679570501"><span class="annot"><span class="annottext">o :: Value
+</span><a href="#local-6989586621679570501"><span class="hs-identifier hs-var">o</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Number</span></span><span> </span><span id="local-6989586621679570499"><span class="annot"><span class="annottext">n :: Scientific
+</span><a href="#local-6989586621679570499"><span class="hs-identifier hs-var">n</span></a></span></span><span class="hs-special">)</span><span>
+</span><span id="line-89"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Scientific -&gt; Bool
+</span><span class="hs-identifier hs-var">isInteger</span></span><span> </span><span class="annot"><span class="annottext">Scientific
+</span><a href="#local-6989586621679570499"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Value -&gt; HashSet Value -&gt; HashMap Value (HashSet Value)
+forall k v. Hashable k =&gt; k -&gt; v -&gt; HashMap k v
+</span><span class="hs-identifier hs-var">HM.singleton</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Text -&gt; Value
+</span><span class="hs-identifier hs-var">String</span></span><span> </span><span class="annot"><span class="hs-string">&quot;int&quot;</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Value -&gt; HashSet Value
+forall a. Hashable a =&gt; a -&gt; HashSet a
+</span><span class="hs-identifier hs-var">S.singleton</span></span><span> </span><span class="annot"><span class="annottext">Value
+</span><a href="#local-6989586621679570501"><span class="hs-identifier hs-var">o</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-90"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Value -&gt; HashSet Value -&gt; HashMap Value (HashSet Value)
+forall k v. Hashable k =&gt; k -&gt; v -&gt; HashMap k v
+</span><span class="hs-identifier hs-var">HM.singleton</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Text -&gt; Value
+</span><span class="hs-identifier hs-var">String</span></span><span> </span><span class="annot"><span class="hs-string">&quot;float&quot;</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Value -&gt; HashSet Value
+forall a. Hashable a =&gt; a -&gt; HashSet a
+</span><span class="hs-identifier hs-var">S.singleton</span></span><span> </span><span class="annot"><span class="annottext">Value
+</span><a href="#local-6989586621679570501"><span class="hs-identifier hs-var">o</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-91"></span><span class="annot"><a href="JSON.Utils.html#createAllPathsWithValues"><span class="hs-identifier hs-var">createAllPathsWithValues</span></a></span><span> </span><span id="local-6989586621679570498"><span class="annot"><span class="annottext">o :: Value
+</span><a href="#local-6989586621679570498"><span class="hs-identifier hs-var">o</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-identifier">_</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Value -&gt; HashSet Value -&gt; HashMap Value (HashSet Value)
+forall k v. Hashable k =&gt; k -&gt; v -&gt; HashMap k v
+</span><span class="hs-identifier hs-var">HM.singleton</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Text -&gt; Value
+</span><span class="hs-identifier hs-var">String</span></span><span> </span><span class="annot"><span class="hs-string">&quot;bool&quot;</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Value -&gt; HashSet Value
+forall a. Hashable a =&gt; a -&gt; HashSet a
+</span><span class="hs-identifier hs-var">S.singleton</span></span><span> </span><span class="annot"><span class="annottext">Value
+</span><a href="#local-6989586621679570498"><span class="hs-identifier hs-var">o</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-92"></span><span class="annot"><a href="JSON.Utils.html#createAllPathsWithValues"><span class="hs-identifier hs-var">createAllPathsWithValues</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Null</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Value -&gt; HashSet Value -&gt; HashMap Value (HashSet Value)
+forall k v. Hashable k =&gt; k -&gt; v -&gt; HashMap k v
+</span><span class="hs-identifier hs-var">HM.singleton</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Text -&gt; Value
+</span><span class="hs-identifier hs-var">String</span></span><span> </span><span class="annot"><span class="hs-string">&quot;null&quot;</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Value -&gt; HashSet Value
+forall a. Hashable a =&gt; a -&gt; HashSet a
+</span><span class="hs-identifier hs-var">S.singleton</span></span><span> </span><span class="annot"><span class="annottext">Value
+</span><span class="hs-identifier hs-var">Null</span></span><span class="hs-special">)</span><span>
+</span><span id="line-93"></span><span>
+</span><span id="line-94"></span><span>
+</span><span id="line-95"></span><span>
+</span><span id="line-96"></span><span>
+</span><span id="line-97"></span><span class="hs-comment">{-|
+This function takes a JSON object and flattens it into a list of EAV triples. 
+The entities are given a uniquely generated UUID, to prevent any clashes with data
+already in the EAV database. As a result, running this function repeatedly will generate
+different output, since the UUIDs are generated at random.
+
+For example, given:
+
+&gt;{
+&gt;  &quot;name&quot;: &quot;Sam&quot;,
+&gt;  &quot;age&quot;: 25.5,
+&gt;  &quot;address&quot;: {
+&gt;    &quot;street&quot;: &quot;Middle&quot;,
+&gt;    &quot;house_no&quot;: 26,
+&gt;    &quot;city&quot;: &quot;Towcester&quot;
+&gt;  }
+&gt;}
+
+'flattenToEAV' returns the UUID of the root object and a list of triples, 
+encoding the original object:
+
+&gt;(
+&gt;  60bcf653-fc8e-40dd-bb15-c332a99969da,
+&gt;  [
+&gt;    (60bcf653-fc8e-40dd-bb15-c332a99969da, &quot;name&quot;, &quot;Sam&quot;),
+&gt;    (60bcf653-fc8e-40dd-bb15-c332a99969da, &quot;age&quot;, &quot;25.5&quot;),
+&gt;    (d53f0483-1107-4a8c-b544-02e8ed54778d, &quot;parent_uuid&quot;, &quot;60bcf653-fc8e-40dd-bb15-c332a99969da&quot;),
+&gt;    (d53f0483-1107-4a8c-b544-02e8ed54778d, &quot;parent_attr&quot;, &quot;address&quot;),
+&gt;    (d53f0483-1107-4a8c-b544-02e8ed54778d, &quot;city&quot;, &quot;Towcester&quot;),
+&gt;    (d53f0483-1107-4a8c-b544-02e8ed54778d, &quot;street&quot;, &quot;Middle&quot;),
+&gt;    (d53f0483-1107-4a8c-b544-02e8ed54778d, &quot;house_no&quot;, &quot;26&quot;)
+&gt;  ]
+&gt;)
+
+Nesting information is preserved by including the @parent_uuid@ and @parent_attr@ triples:
+
+&gt;(&lt;child object UUID&gt;, &quot;parent_uuid&quot;, &lt;parent UUID&gt;),
+&gt;(&lt;child object UUID&gt;, &quot;parent_attr&quot;, &lt;attribute name&gt;)
+-}</span><span>
+</span><span id="line-136"></span><span id="local-6989586621679570548"><span class="annot"><a href="JSON.Utils.html#flattenToEAV"><span class="hs-identifier hs-type">flattenToEAV</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">MonadIO</span></span><span> </span><span class="annot"><a href="#local-6989586621679570548"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Value</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679570548"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">UUID.UUID</span></span><span class="hs-special">,</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">UUID.UUID</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span class="hs-special">)</span></span><span>
+</span><span id="line-137"></span><span id="flattenToEAV"><span class="annot"><span class="annottext">flattenToEAV :: Value -&gt; m (UUID, [(UUID, Text, Text)])
+</span><a href="JSON.Utils.html#flattenToEAV"><span class="hs-identifier hs-var hs-var">flattenToEAV</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Object</span></span><span> </span><span id="local-6989586621679570494"><span class="annot"><span class="annottext">o :: Object
+</span><a href="#local-6989586621679570494"><span class="hs-identifier hs-var">o</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-138"></span><span>  </span><span id="local-6989586621679570493"><span class="annot"><span class="annottext">UUID
+</span><a href="#local-6989586621679570493"><span class="hs-identifier hs-var">uuid</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO UUID -&gt; m UUID
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">liftIO</span></span><span> </span><span class="annot"><span class="annottext">(IO UUID -&gt; m UUID) -&gt; IO UUID -&gt; m UUID
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">IO UUID
+</span><span class="hs-identifier hs-var">UUID.nextRandom</span></span><span>
+</span><span id="line-139"></span><span>  </span><span id="local-6989586621679570491"><span class="annot"><span class="annottext">[(UUID, Text, Text)]
+</span><a href="#local-6989586621679570491"><span class="hs-identifier hs-var">res</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">([(UUID, Text, Text)] -&gt; (Text, Value) -&gt; m [(UUID, Text, Text)])
+-&gt; [(UUID, Text, Text)]
+-&gt; [(Text, Value)]
+-&gt; m [(UUID, Text, Text)]
+forall (t :: * -&gt; *) (m :: * -&gt; *) b a.
+(Foldable t, Monad m) =&gt;
+(b -&gt; a -&gt; m b) -&gt; b -&gt; t a -&gt; m b
+</span><span class="hs-identifier hs-var">foldlM</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679570490"><span class="annot"><span class="annottext">acc :: [(UUID, Text, Text)]
+</span><a href="#local-6989586621679570490"><span class="hs-identifier hs-var">acc</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679570489"><span class="annot"><span class="annottext">attr :: Text
+</span><a href="#local-6989586621679570489"><span class="hs-identifier hs-var">attr</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679570488"><span class="annot"><span class="annottext">val :: Value
+</span><a href="#local-6989586621679570488"><span class="hs-identifier hs-var">val</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-140"></span><span>      </span><span class="hs-special">(</span><span class="hs-identifier">_</span><span class="hs-special">,</span><span id="local-6989586621679570487"><span class="annot"><span class="annottext">r :: [(UUID, Text, Text)]
+</span><a href="#local-6989586621679570487"><span class="hs-identifier hs-var">r</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">UUID -&gt; Text -&gt; Value -&gt; m (UUID, [(UUID, Text, Text)])
+forall (m :: * -&gt; *).
+MonadIO m =&gt;
+UUID -&gt; Text -&gt; Value -&gt; m (UUID, [(UUID, Text, Text)])
+</span><a href="#local-6989586621679570486"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">UUID
+</span><a href="#local-6989586621679570493"><span class="hs-identifier hs-var">uuid</span></a></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679570489"><span class="hs-identifier hs-var">attr</span></a></span><span> </span><span class="annot"><span class="annottext">Value
+</span><a href="#local-6989586621679570488"><span class="hs-identifier hs-var">val</span></a></span><span>
+</span><span id="line-141"></span><span>      </span><span class="annot"><span class="annottext">[(UUID, Text, Text)] -&gt; m [(UUID, Text, Text)]
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">([(UUID, Text, Text)] -&gt; m [(UUID, Text, Text)])
+-&gt; [(UUID, Text, Text)] -&gt; m [(UUID, Text, Text)]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[(UUID, Text, Text)]
+</span><a href="#local-6989586621679570487"><span class="hs-identifier hs-var">r</span></a></span><span> </span><span class="annot"><span class="annottext">[(UUID, Text, Text)]
+-&gt; [(UUID, Text, Text)] -&gt; [(UUID, Text, Text)]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[(UUID, Text, Text)]
+</span><a href="#local-6989586621679570490"><span class="hs-identifier hs-var">acc</span></a></span><span>
+</span><span id="line-142"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">([(Text, Value)] -&gt; m [(UUID, Text, Text)])
+-&gt; [(Text, Value)] -&gt; m [(UUID, Text, Text)]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Object -&gt; [(Text, Value)]
+forall k v. HashMap k v -&gt; [(k, v)]
+</span><span class="hs-identifier hs-var">HM.toList</span></span><span> </span><span class="annot"><span class="annottext">Object
+</span><a href="#local-6989586621679570494"><span class="hs-identifier hs-var">o</span></a></span><span>
+</span><span id="line-143"></span><span>  </span><span class="annot"><span class="annottext">(UUID, [(UUID, Text, Text)]) -&gt; m (UUID, [(UUID, Text, Text)])
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">((UUID, [(UUID, Text, Text)]) -&gt; m (UUID, [(UUID, Text, Text)]))
+-&gt; (UUID, [(UUID, Text, Text)]) -&gt; m (UUID, [(UUID, Text, Text)])
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">UUID
+</span><a href="#local-6989586621679570493"><span class="hs-identifier hs-var">uuid</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[(UUID, Text, Text)]
+</span><a href="#local-6989586621679570491"><span class="hs-identifier hs-var">res</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-144"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-145"></span><span>    </span><span id="local-6989586621679570553"><span class="annot"><a href="#local-6989586621679570486"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">MonadIO</span></span><span> </span><span class="annot"><a href="#local-6989586621679570553"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">UUID.UUID</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Value</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679570553"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">UUID.UUID</span></span><span class="hs-special">,</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">UUID.UUID</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span class="hs-special">)</span></span><span>
+</span><span id="line-146"></span><span>    </span><span id="local-6989586621679570486"><span class="annot"><span class="annottext">f :: UUID -&gt; Text -&gt; Value -&gt; m (UUID, [(UUID, Text, Text)])
+</span><a href="#local-6989586621679570486"><span class="hs-identifier hs-var hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679570484"><span class="annot"><span class="annottext">uuid :: UUID
+</span><a href="#local-6989586621679570484"><span class="hs-identifier hs-var">uuid</span></a></span></span><span> </span><span id="local-6989586621679570483"><span class="annot"><span class="annottext">attr :: Text
+</span><a href="#local-6989586621679570483"><span class="hs-identifier hs-var">attr</span></a></span></span><span> </span><span id="local-6989586621679570482"><span class="annot"><span class="annottext">val :: Value
+</span><a href="#local-6989586621679570482"><span class="hs-identifier hs-var">val</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Object</span></span><span> </span><span class="hs-identifier">_</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-147"></span><span>      </span><span class="hs-special">(</span><span id="local-6989586621679570481"><span class="annot"><span class="annottext">uuid' :: UUID
+</span><a href="#local-6989586621679570481"><span class="hs-identifier hs-var">uuid'</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679570480"><span class="annot"><span class="annottext">res :: [(UUID, Text, Text)]
+</span><a href="#local-6989586621679570480"><span class="hs-identifier hs-var">res</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Value -&gt; m (UUID, [(UUID, Text, Text)])
+forall (m :: * -&gt; *).
+MonadIO m =&gt;
+Value -&gt; m (UUID, [(UUID, Text, Text)])
+</span><a href="JSON.Utils.html#flattenToEAV"><span class="hs-identifier hs-var">flattenToEAV</span></a></span><span> </span><span class="annot"><span class="annottext">Value
+</span><a href="#local-6989586621679570482"><span class="hs-identifier hs-var">val</span></a></span><span>
+</span><span id="line-148"></span><span>      </span><span class="annot"><span class="annottext">(UUID, [(UUID, Text, Text)]) -&gt; m (UUID, [(UUID, Text, Text)])
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">((UUID, [(UUID, Text, Text)]) -&gt; m (UUID, [(UUID, Text, Text)]))
+-&gt; (UUID, [(UUID, Text, Text)]) -&gt; m (UUID, [(UUID, Text, Text)])
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">UUID
+</span><a href="#local-6989586621679570484"><span class="hs-identifier hs-var">uuid</span></a></span><span class="hs-special">,</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">UUID
+</span><a href="#local-6989586621679570481"><span class="hs-identifier hs-var">uuid'</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-string">&quot;parent_uuid&quot;</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">UUID -&gt; Text
+</span><span class="hs-identifier hs-var">UUID.toText</span></span><span> </span><span class="annot"><span class="annottext">UUID
+</span><a href="#local-6989586621679570484"><span class="hs-identifier hs-var">uuid</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(UUID, Text, Text) -&gt; [(UUID, Text, Text)] -&gt; [(UUID, Text, Text)]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">UUID
+</span><a href="#local-6989586621679570481"><span class="hs-identifier hs-var">uuid'</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-string">&quot;parent_attr&quot;</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679570483"><span class="hs-identifier hs-var">attr</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(UUID, Text, Text) -&gt; [(UUID, Text, Text)] -&gt; [(UUID, Text, Text)]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">[(UUID, Text, Text)]
+</span><a href="#local-6989586621679570480"><span class="hs-identifier hs-var">res</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-149"></span><span>    </span><span class="annot"><a href="#local-6989586621679570486"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span id="local-6989586621679570478"><span class="annot"><span class="annottext">uuid :: UUID
+</span><a href="#local-6989586621679570478"><span class="hs-identifier hs-var">uuid</span></a></span></span><span> </span><span id="local-6989586621679570477"><span class="annot"><span class="annottext">attr :: Text
+</span><a href="#local-6989586621679570477"><span class="hs-identifier hs-var">attr</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Array</span></span><span> </span><span id="local-6989586621679570476"><span class="annot"><span class="annottext">as :: Array
+</span><a href="#local-6989586621679570476"><span class="hs-keyword hs-var">as</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-150"></span><span>      </span><span id="local-6989586621679570475"><span class="annot"><span class="annottext">[(UUID, Text, Text)]
+</span><a href="#local-6989586621679570475"><span class="hs-identifier hs-var">res</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">([(UUID, Text, Text)] -&gt; Value -&gt; m [(UUID, Text, Text)])
+-&gt; [(UUID, Text, Text)] -&gt; Array -&gt; m [(UUID, Text, Text)]
+forall (t :: * -&gt; *) (m :: * -&gt; *) b a.
+(Foldable t, Monad m) =&gt;
+(b -&gt; a -&gt; m b) -&gt; b -&gt; t a -&gt; m b
+</span><span class="hs-identifier hs-var">foldlM</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679570474"><span class="annot"><span class="annottext">acc :: [(UUID, Text, Text)]
+</span><a href="#local-6989586621679570474"><span class="hs-identifier hs-var">acc</span></a></span></span><span> </span><span id="local-6989586621679570473"><span class="annot"><span class="annottext">v :: Value
+</span><a href="#local-6989586621679570473"><span class="hs-identifier hs-var">v</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-151"></span><span>          </span><span class="hs-special">(</span><span class="hs-identifier">_</span><span class="hs-special">,</span><span id="local-6989586621679570472"><span class="annot"><span class="annottext">r :: [(UUID, Text, Text)]
+</span><a href="#local-6989586621679570472"><span class="hs-identifier hs-var">r</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">UUID -&gt; Text -&gt; Value -&gt; m (UUID, [(UUID, Text, Text)])
+forall (m :: * -&gt; *).
+MonadIO m =&gt;
+UUID -&gt; Text -&gt; Value -&gt; m (UUID, [(UUID, Text, Text)])
+</span><a href="#local-6989586621679570486"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">UUID
+</span><a href="#local-6989586621679570478"><span class="hs-identifier hs-var">uuid</span></a></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679570477"><span class="hs-identifier hs-var">attr</span></a></span><span> </span><span class="annot"><span class="annottext">Value
+</span><a href="#local-6989586621679570473"><span class="hs-identifier hs-var">v</span></a></span><span> </span><span>
+</span><span id="line-152"></span><span>          </span><span class="annot"><span class="annottext">[(UUID, Text, Text)] -&gt; m [(UUID, Text, Text)]
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">([(UUID, Text, Text)] -&gt; m [(UUID, Text, Text)])
+-&gt; [(UUID, Text, Text)] -&gt; m [(UUID, Text, Text)]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[(UUID, Text, Text)]
+</span><a href="#local-6989586621679570472"><span class="hs-identifier hs-var">r</span></a></span><span> </span><span class="annot"><span class="annottext">[(UUID, Text, Text)]
+-&gt; [(UUID, Text, Text)] -&gt; [(UUID, Text, Text)]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[(UUID, Text, Text)]
+</span><a href="#local-6989586621679570474"><span class="hs-identifier hs-var">acc</span></a></span><span>
+</span><span id="line-153"></span><span>        </span><span class="hs-special">)</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">Array
+</span><a href="#local-6989586621679570476"><span class="hs-keyword hs-var">as</span></a></span><span>
+</span><span id="line-154"></span><span>      </span><span class="annot"><span class="annottext">(UUID, [(UUID, Text, Text)]) -&gt; m (UUID, [(UUID, Text, Text)])
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">UUID
+</span><a href="#local-6989586621679570478"><span class="hs-identifier hs-var">uuid</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[(UUID, Text, Text)]
+</span><a href="#local-6989586621679570475"><span class="hs-identifier hs-var">res</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-155"></span><span>    </span><span class="annot"><a href="#local-6989586621679570486"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span id="local-6989586621679570471"><span class="annot"><span class="annottext">uuid :: UUID
+</span><a href="#local-6989586621679570471"><span class="hs-identifier hs-var">uuid</span></a></span></span><span> </span><span id="local-6989586621679570470"><span class="annot"><span class="annottext">attr :: Text
+</span><a href="#local-6989586621679570470"><span class="hs-identifier hs-var">attr</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span id="local-6989586621679570469"><span class="annot"><span class="annottext">val :: Text
+</span><a href="#local-6989586621679570469"><span class="hs-identifier hs-var">val</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(UUID, [(UUID, Text, Text)]) -&gt; m (UUID, [(UUID, Text, Text)])
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">UUID
+</span><a href="#local-6989586621679570471"><span class="hs-identifier hs-var">uuid</span></a></span><span class="hs-special">,</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="annottext">UUID
+</span><a href="#local-6989586621679570471"><span class="hs-identifier hs-var">uuid</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679570470"><span class="hs-identifier hs-var">attr</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679570469"><span class="hs-identifier hs-var">val</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span><span class="hs-special">)</span><span>
+</span><span id="line-156"></span><span>    </span><span class="annot"><a href="#local-6989586621679570486"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span id="local-6989586621679570468"><span class="annot"><span class="annottext">uuid :: UUID
+</span><a href="#local-6989586621679570468"><span class="hs-identifier hs-var">uuid</span></a></span></span><span> </span><span id="local-6989586621679570467"><span class="annot"><span class="annottext">attr :: Text
+</span><a href="#local-6989586621679570467"><span class="hs-identifier hs-var">attr</span></a></span></span><span> </span><span id="local-6989586621679570466"><span class="annot"><span class="annottext">val :: Value
+</span><a href="#local-6989586621679570466"><span class="hs-identifier hs-var">val</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(UUID, [(UUID, Text, Text)]) -&gt; m (UUID, [(UUID, Text, Text)])
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">UUID
+</span><a href="#local-6989586621679570468"><span class="hs-identifier hs-var">uuid</span></a></span><span class="hs-special">,</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="annottext">UUID
+</span><a href="#local-6989586621679570468"><span class="hs-identifier hs-var">uuid</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679570467"><span class="hs-identifier hs-var">attr</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">ByteString -&gt; Text
+forall a b. StringConv a b =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">toS</span></span><span> </span><span class="annot"><span class="annottext">(ByteString -&gt; Text) -&gt; ByteString -&gt; Text
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Value -&gt; ByteString
+forall a. ToJSON a =&gt; a -&gt; ByteString
+</span><span class="hs-identifier hs-var">encode</span></span><span> </span><span class="annot"><span class="annottext">Value
+</span><a href="#local-6989586621679570466"><span class="hs-identifier hs-var">val</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span><span class="hs-special">)</span><span>
+</span><span id="line-157"></span><span class="annot"><a href="JSON.Utils.html#flattenToEAV"><span class="hs-identifier hs-var">flattenToEAV</span></a></span><span> </span><span class="hs-identifier">_</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">m (UUID, [(UUID, Text, Text)])
+forall a. HasCallStack =&gt; a
+</span><span class="hs-identifier hs-var">undefined</span></span><span>
+</span><span id="line-158"></span><span>
+</span><span id="line-159"></span><span>
+</span><span id="line-160"></span><span>
+</span><span id="line-161"></span></pre></body></html>

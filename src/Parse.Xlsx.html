@@ -1,0 +1,432 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE NoMonomorphismRestriction #-}</span><span>
+</span><span id="line-2"></span><span>
+</span><span id="line-3"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Parse.Xlsx</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Parse.Xlsx.html#readXlsxFile"><span class="hs-identifier">readXlsxFile</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-4"></span><span>
+</span><span id="line-5"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Codec.Xlsx</span></span><span>
+</span><span id="line-6"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Lens</span></span><span>
+</span><span id="line-7"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Monad.IO.Class</span></span><span>     </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">liftIO</span></span><span class="hs-special">)</span><span>
+</span><span id="line-8"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Monad.State</span></span><span>        </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">evalState</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">put</span></span><span class="hs-special">)</span><span>
+</span><span id="line-9"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Aeson</span></span><span>                 </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">JSON</span></span><span>
+</span><span id="line-10"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.ByteString.Lazy</span></span><span>       </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">L</span></span><span>
+</span><span id="line-11"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map.Strict</span></span><span>            </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">M</span></span><span>
+</span><span id="line-12"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Text</span></span><span>                  </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Text</span></span><span class="hs-special">)</span><span>
+</span><span id="line-13"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Text</span></span><span>                  </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">T</span></span><span>
+</span><span id="line-14"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Monad.IO.Class</span></span><span>     </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">MonadIO</span></span><span class="hs-special">)</span><span>
+</span><span id="line-15"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.List</span></span><span>                  </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">sortOn</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">find</span></span><span class="hs-special">)</span><span>
+</span><span id="line-16"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Parse.Utils.html"><span class="hs-identifier">Parse.Utils</span></a></span><span>
+</span><span id="line-17"></span><span>
+</span><span id="line-18"></span><span class="hs-comment">-- Adapted from https://github.com/nkpart/xlsx2yaml/blob/master/src/Lib.hs</span><span>
+</span><span id="line-19"></span><span>
+</span><span id="line-20"></span><span class="hs-keyword">type</span><span> </span><span id="Row"><span class="annot"><a href="Parse.Xlsx.html#Row"><span class="hs-identifier hs-var">Row</span></a></span></span><span> </span><span id="local-6989586621679596773"><span class="annot"><a href="#local-6989586621679596773"><span class="hs-identifier hs-type">k</span></a></span></span><span> </span><span id="local-6989586621679596772"><span class="annot"><a href="#local-6989586621679596772"><span class="hs-identifier hs-type">v</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">M.Map</span></span><span> </span><span class="annot"><a href="#local-6989586621679596773"><span class="hs-identifier hs-type">k</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679596772"><span class="hs-identifier hs-type">v</span></a></span><span>
+</span><span id="line-21"></span><span class="hs-keyword">type</span><span> </span><span id="Sheet"><span class="annot"><a href="Parse.Xlsx.html#Sheet"><span class="hs-identifier hs-var">Sheet</span></a></span></span><span> </span><span id="local-6989586621679596771"><span class="annot"><a href="#local-6989586621679596771"><span class="hs-identifier hs-type">r</span></a></span></span><span> </span><span id="local-6989586621679596770"><span class="annot"><a href="#local-6989586621679596770"><span class="hs-identifier hs-type">c</span></a></span></span><span> </span><span id="local-6989586621679596769"><span class="annot"><a href="#local-6989586621679596769"><span class="hs-identifier hs-type">v</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">M.Map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679596771"><span class="hs-identifier hs-type">r</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679596770"><span class="hs-identifier hs-type">c</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679596769"><span class="hs-identifier hs-type">v</span></a></span><span>
+</span><span id="line-22"></span><span>
+</span><span id="line-23"></span><span>
+</span><span id="line-24"></span><span>
+</span><span id="line-25"></span><span id="local-6989586621679596768"><span class="annot"><a href="Parse.Xlsx.html#readXlsxFile"><span class="hs-identifier hs-type">readXlsxFile</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">MonadIO</span></span><span> </span><span class="annot"><a href="#local-6989586621679596768"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">FilePath</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">T.Text</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679596768"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">JSON.Value</span></span><span class="hs-special">]</span><span class="hs-special">,</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">JSON.Value</span></span><span class="hs-special">]</span><span class="hs-special">)</span><span class="hs-special">)</span></span><span>
+</span><span id="line-26"></span><span id="readXlsxFile"><span class="annot"><span class="annottext">readXlsxFile :: FilePath -&gt; Maybe Text -&gt; m (Maybe ([Value], [Value]))
+</span><a href="Parse.Xlsx.html#readXlsxFile"><span class="hs-identifier hs-var hs-var">readXlsxFile</span></a></span></span><span> </span><span id="local-6989586621679596767"><span class="annot"><span class="annottext">inFile :: FilePath
+</span><a href="#local-6989586621679596767"><span class="hs-identifier hs-var">inFile</span></a></span></span><span> </span><span id="local-6989586621679596766"><span class="annot"><span class="annottext">sheetName :: Maybe Text
+</span><a href="#local-6989586621679596766"><span class="hs-identifier hs-var">sheetName</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-27"></span><span>    </span><span id="local-6989586621679596761"><span id="local-6989586621679596762"><span id="local-6989586621679596763"><span id="local-6989586621679596764"><span id="local-6989586621679596765"><span class="annot"><span class="hs-identifier hs-type">Xlsx</span></span><span class="hs-special">{</span><span class="hs-glyph">..</span><span class="hs-special">}</span></span></span></span></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO Xlsx -&gt; m Xlsx
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">liftIO</span></span><span> </span><span class="annot"><span class="annottext">(IO Xlsx -&gt; m Xlsx) -&gt; IO Xlsx -&gt; m Xlsx
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">ByteString -&gt; Xlsx
+</span><span class="hs-identifier hs-var">toXlsx</span></span><span> </span><span class="annot"><span class="annottext">(ByteString -&gt; Xlsx) -&gt; IO ByteString -&gt; IO Xlsx
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">FilePath -&gt; IO ByteString
+</span><span class="hs-identifier hs-var">L.readFile</span></span><span> </span><span class="annot"><span class="annottext">FilePath
+</span><a href="#local-6989586621679596767"><span class="hs-identifier hs-var">inFile</span></a></span><span>
+</span><span id="line-28"></span><span>    </span><span class="hs-keyword">case</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe Text
+</span><a href="#local-6989586621679596766"><span class="hs-identifier hs-var">sheetName</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[(Text, Worksheet)]
+</span><a href="#local-6989586621679596765"><span class="hs-identifier hs-var">_xlSheets</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-29"></span><span>      </span><span class="hs-special">(</span><span class="hs-identifier">_</span><span class="hs-special">,</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe ([Value], [Value]) -&gt; m (Maybe ([Value], [Value]))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Maybe ([Value], [Value])
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-30"></span><span>      </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Nothing</span></span><span class="hs-special">,</span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="hs-identifier">_</span><span class="hs-special">,</span><span id="local-6989586621679596751"><span class="annot"><span class="annottext">d :: Worksheet
+</span><a href="#local-6989586621679596751"><span class="hs-identifier hs-var">d</span></a></span></span><span class="hs-special">)</span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span class="hs-identifier">_</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe ([Value], [Value]) -&gt; m (Maybe ([Value], [Value]))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Maybe ([Value], [Value]) -&gt; m (Maybe ([Value], [Value])))
+-&gt; Maybe ([Value], [Value]) -&gt; m (Maybe ([Value], [Value]))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">([Value], [Value]) -&gt; Maybe ([Value], [Value])
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(([Value], [Value]) -&gt; Maybe ([Value], [Value]))
+-&gt; ([Value], [Value]) -&gt; Maybe ([Value], [Value])
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Worksheet -&gt; ([Value], [Value])
+</span><a href="Parse.Xlsx.html#sheetToValue"><span class="hs-identifier hs-var">sheetToValue</span></a></span><span> </span><span class="annot"><span class="hs-number">2</span></span><span> </span><span class="annot"><span class="annottext">Worksheet
+</span><a href="#local-6989586621679596751"><span class="hs-identifier hs-var">d</span></a></span><span>
+</span><span id="line-31"></span><span>      </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679596749"><span class="annot"><span class="annottext">sheet :: Text
+</span><a href="#local-6989586621679596749"><span class="hs-identifier hs-var">sheet</span></a></span></span><span class="hs-special">,</span><span> </span><span class="hs-identifier">_</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe ([Value], [Value]) -&gt; m (Maybe ([Value], [Value]))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Maybe ([Value], [Value]) -&gt; m (Maybe ([Value], [Value])))
+-&gt; Maybe ([Value], [Value]) -&gt; m (Maybe ([Value], [Value]))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">((Text, Worksheet) -&gt; ([Value], [Value]))
+-&gt; Maybe (Text, Worksheet) -&gt; Maybe ([Value], [Value])
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int -&gt; Worksheet -&gt; ([Value], [Value])
+</span><a href="Parse.Xlsx.html#sheetToValue"><span class="hs-identifier hs-var">sheetToValue</span></a></span><span> </span><span class="annot"><span class="hs-number">2</span></span><span> </span><span class="annot"><span class="annottext">(Worksheet -&gt; ([Value], [Value]))
+-&gt; ((Text, Worksheet) -&gt; Worksheet)
+-&gt; (Text, Worksheet)
+-&gt; ([Value], [Value])
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(Text, Worksheet) -&gt; Worksheet
+forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Maybe (Text, Worksheet) -&gt; Maybe ([Value], [Value]))
+-&gt; Maybe (Text, Worksheet) -&gt; Maybe ([Value], [Value])
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">((Text, Worksheet) -&gt; Bool)
+-&gt; [(Text, Worksheet)] -&gt; Maybe (Text, Worksheet)
+forall (t :: * -&gt; *) a. Foldable t =&gt; (a -&gt; Bool) -&gt; t a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">find</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span class="hs-special">(</span><span id="local-6989586621679596747"><span class="annot"><span class="annottext">s :: Text
+</span><a href="#local-6989586621679596747"><span class="hs-identifier hs-var">s</span></a></span></span><span class="hs-special">,</span><span class="hs-identifier">_</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679596747"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">Text -&gt; Text -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679596749"><span class="hs-identifier hs-var">sheet</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[(Text, Worksheet)]
+</span><a href="#local-6989586621679596765"><span class="hs-identifier hs-var">_xlSheets</span></a></span><span>
+</span><span id="line-32"></span><span>
+</span><span id="line-33"></span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- | Encode a worksheet as a JSON Object.</span><span>
+</span><span id="line-35"></span><span class="annot"><a href="Parse.Xlsx.html#sheetToValue"><span class="hs-identifier hs-type">sheetToValue</span></a></span><span>
+</span><span id="line-36"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Worksheet</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">JSON.Value</span></span><span class="hs-special">]</span><span class="hs-special">,</span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">JSON.Value</span></span><span class="hs-special">]</span><span class="hs-special">)</span><span>
+</span><span id="line-37"></span><span id="sheetToValue"><span class="annot"><span class="annottext">sheetToValue :: Int -&gt; Worksheet -&gt; ([Value], [Value])
+</span><a href="Parse.Xlsx.html#sheetToValue"><span class="hs-identifier hs-var hs-var">sheetToValue</span></a></span></span><span> </span><span id="local-6989586621679596746"><span class="annot"><span class="annottext">dataStart :: Int
+</span><a href="#local-6989586621679596746"><span class="hs-identifier hs-var">dataStart</span></a></span></span><span> </span><span id="local-6989586621679596745"><span class="annot"><span class="annottext">sheet :: Worksheet
+</span><a href="#local-6989586621679596745"><span class="hs-identifier hs-var">sheet</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-38"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679596744"><span class="annot"><span class="annottext">fields :: Row Int Text
+</span><a href="#local-6989586621679596744"><span class="hs-identifier hs-var hs-var">fields</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Row Int Cell -&gt; Row Int Text
+forall k. Row k Cell -&gt; Row k Text
+</span><a href="Parse.Xlsx.html#readFieldNames"><span class="hs-identifier hs-var">readFieldNames</span></a></span><span> </span><span class="annot"><span class="annottext">(Row Int Cell -&gt; Row Int Text)
+-&gt; (Worksheet -&gt; Row Int Cell) -&gt; Worksheet -&gt; Row Int Text
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Sheet Int Int Cell -&gt; Row Int Cell
+forall k2 a1 a. (Ord k2, Eq a1) =&gt; a1 -&gt; Sheet a1 k2 a -&gt; Row k2 a
+</span><a href="Parse.Xlsx.html#extractRow"><span class="hs-identifier hs-var">extractRow</span></a></span><span> </span><span class="annot"><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">(Sheet Int Int Cell -&gt; Row Int Cell)
+-&gt; (Worksheet -&gt; Sheet Int Int Cell) -&gt; Worksheet -&gt; Row Int Cell
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Worksheet -&gt; Sheet Int Int Cell
+</span><span class="hs-identifier hs-var hs-var">_wsCells</span></span><span> </span><span class="annot"><span class="annottext">(Worksheet -&gt; Row Int Text) -&gt; Worksheet -&gt; Row Int Text
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Worksheet
+</span><a href="#local-6989586621679596745"><span class="hs-identifier hs-var">sheet</span></a></span><span>
+</span><span id="line-39"></span><span>      </span><span id="local-6989586621679596740"><span class="annot"><span class="annottext">unique_fields :: Row Int Text
+</span><a href="#local-6989586621679596740"><span class="hs-identifier hs-var hs-var">unique_fields</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Row Int Text -&gt; Row Int Text
+forall (t :: * -&gt; *) a.
+(Traversable t, Ord a, Semigroup a, StringConv FilePath a) =&gt;
+t a -&gt; t a
+</span><a href="Parse.Utils.html#uniqueHeader"><span class="hs-identifier hs-var">uniqueHeader</span></a></span><span> </span><span class="annot"><span class="annottext">Row Int Text
+</span><a href="#local-6989586621679596744"><span class="hs-identifier hs-var">fields</span></a></span><span>
+</span><span id="line-40"></span><span>      </span><span id="local-6989586621679596738"><span class="annot"><span class="annottext">dataRows :: [Map Int CellValue]
+</span><a href="#local-6989586621679596738"><span class="hs-identifier hs-var hs-var">dataRows</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Map (Int, Int) CellValue -&gt; [Map Int CellValue]
+forall c r x.
+(Ord c, Num r, Num c, Eq r) =&gt;
+r -&gt; Map (r, c) x -&gt; [Map c x]
+</span><a href="Parse.Xlsx.html#extractDefinedRows"><span class="hs-identifier hs-var">extractDefinedRows</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679596746"><span class="hs-identifier hs-var">dataStart</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(Cell -&gt; Maybe CellValue)
+-&gt; Sheet Int Int Cell -&gt; Map (Int, Int) CellValue
+forall a b k. (a -&gt; Maybe b) -&gt; Map k a -&gt; Map k b
+</span><span class="hs-identifier hs-var">M.mapMaybe</span></span><span> </span><span class="annot"><span class="annottext">Cell -&gt; Maybe CellValue
+</span><span class="hs-identifier hs-var hs-var">_cellValue</span></span><span> </span><span class="annot"><span class="annottext">(Sheet Int Int Cell -&gt; Map (Int, Int) CellValue)
+-&gt; Sheet Int Int Cell -&gt; Map (Int, Int) CellValue
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Worksheet -&gt; Sheet Int Int Cell
+</span><span class="hs-identifier hs-var hs-var">_wsCells</span></span><span> </span><span class="annot"><span class="annottext">Worksheet
+</span><a href="#local-6989586621679596745"><span class="hs-identifier hs-var">sheet</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-41"></span><span>      </span><span id="local-6989586621679596734"><span class="annot"><span class="annottext">rows :: [Value]
+</span><a href="#local-6989586621679596734"><span class="hs-identifier hs-var hs-var">rows</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">((Int, Map Int CellValue) -&gt; Value)
+-&gt; [(Int, Map Int CellValue)] -&gt; [Value]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span class="hs-special">(</span><span id="local-6989586621679596733"><span class="annot"><span class="annottext">i :: Int
+</span><a href="#local-6989586621679596733"><span class="hs-identifier hs-var">i</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679596732"><span class="annot"><span class="annottext">r :: Map Int CellValue
+</span><a href="#local-6989586621679596732"><span class="hs-identifier hs-var">r</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[Pair] -&gt; Value
+</span><span class="hs-identifier hs-var">JSON.object</span></span><span> </span><span class="annot"><span class="annottext">([Pair] -&gt; Value) -&gt; [Pair] -&gt; Value
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Row Int Text -&gt; Text -&gt; Int -&gt; Map Int CellValue -&gt; [Pair]
+forall k1.
+Ord k1 =&gt;
+Row k1 Text -&gt; Text -&gt; Int -&gt; Row k1 CellValue -&gt; [Pair]
+</span><a href="Parse.Xlsx.html#rowToJSON"><span class="hs-identifier hs-var">rowToJSON</span></a></span><span> </span><span class="annot"><span class="annottext">Row Int Text
+</span><a href="#local-6989586621679596740"><span class="hs-identifier hs-var">unique_fields</span></a></span><span> </span><span class="annot"><span class="hs-string">&quot;i&quot;</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679596733"><span class="hs-identifier hs-var">i</span></a></span><span> </span><span class="annot"><span class="annottext">Map Int CellValue
+</span><a href="#local-6989586621679596732"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">([(Int, Map Int CellValue)] -&gt; [Value])
+-&gt; [(Int, Map Int CellValue)] -&gt; [Value]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Int] -&gt; [Map Int CellValue] -&gt; [(Int, Map Int CellValue)]
+forall a b. [a] -&gt; [b] -&gt; [(a, b)]
+</span><span class="hs-identifier hs-var">zip</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-number">0</span></span><span class="hs-glyph">..</span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">[Map Int CellValue]
+</span><a href="#local-6989586621679596738"><span class="hs-identifier hs-var">dataRows</span></a></span><span>
+</span><span id="line-42"></span><span>  </span><span class="hs-keyword">in</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">((Int, Value) -&gt; Value) -&gt; [(Int, Value)] -&gt; [Value]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">(Int, Value) -&gt; Value
+forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span> </span><span class="annot"><span class="annottext">([(Int, Value)] -&gt; [Value]) -&gt; [(Int, Value)] -&gt; [Value]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">((Int, Value) -&gt; Int) -&gt; [(Int, Value)] -&gt; [(Int, Value)]
+forall b a. Ord b =&gt; (a -&gt; b) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">sortOn</span></span><span> </span><span class="annot"><span class="annottext">(Int, Value) -&gt; Int
+forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span> </span><span class="annot"><span class="annottext">([(Int, Value)] -&gt; [(Int, Value)])
+-&gt; [(Int, Value)] -&gt; [(Int, Value)]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Map Int Value -&gt; [(Int, Value)]
+forall k a. Map k a -&gt; [(k, a)]
+</span><span class="hs-identifier hs-var">M.toList</span></span><span> </span><span class="annot"><span class="annottext">(Map Int Value -&gt; [(Int, Value)])
+-&gt; Map Int Value -&gt; [(Int, Value)]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Text -&gt; Text -&gt; Value)
+-&gt; Row Int Text -&gt; Row Int Text -&gt; Map Int Value
+forall k a b c.
+Ord k =&gt;
+(a -&gt; b -&gt; c) -&gt; Map k a -&gt; Map k b -&gt; Map k c
+</span><span class="hs-identifier hs-var">M.intersectionWith</span></span><span> </span><span class="annot"><span class="annottext">Text -&gt; Text -&gt; Value
+</span><a href="Parse.Utils.html#unifyHeader"><span class="hs-identifier hs-var">unifyHeader</span></a></span><span> </span><span class="annot"><span class="annottext">Row Int Text
+</span><a href="#local-6989586621679596740"><span class="hs-identifier hs-var">unique_fields</span></a></span><span> </span><span class="annot"><span class="annottext">Row Int Text
+</span><a href="#local-6989586621679596744"><span class="hs-identifier hs-var">fields</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[Value]
+</span><a href="#local-6989586621679596734"><span class="hs-identifier hs-var">rows</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-43"></span><span>
+</span><span id="line-44"></span><span>
+</span><span id="line-45"></span><span class="hs-comment">-- | Merge field names with a row of cells, into the contents of a JSON Object</span><span>
+</span><span id="line-46"></span><span id="local-6989586621679596858"><span class="annot"><a href="Parse.Xlsx.html#rowToJSON"><span class="hs-identifier hs-type">rowToJSON</span></a></span><span>
+</span><span id="line-47"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679596858"><span class="hs-identifier hs-type">k1</span></a></span><span>
+</span><span id="line-48"></span><span>  </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Parse.Xlsx.html#Row"><span class="hs-identifier hs-type">Row</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679596858"><span class="hs-identifier hs-type">k1</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Parse.Xlsx.html#Row"><span class="hs-identifier hs-type">Row</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679596858"><span class="hs-identifier hs-type">k1</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">CellValue</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">JSON.Value</span></span><span class="hs-special">)</span><span class="hs-special">]</span></span><span>
+</span><span id="line-49"></span><span id="rowToJSON"><span class="annot"><span class="annottext">rowToJSON :: Row k1 Text -&gt; Text -&gt; Int -&gt; Row k1 CellValue -&gt; [Pair]
+</span><a href="Parse.Xlsx.html#rowToJSON"><span class="hs-identifier hs-var hs-var">rowToJSON</span></a></span></span><span> </span><span id="local-6989586621679596726"><span class="annot"><span class="annottext">fields :: Row k1 Text
+</span><a href="#local-6989586621679596726"><span class="hs-identifier hs-var">fields</span></a></span></span><span> </span><span id="local-6989586621679596725"><span class="annot"><span class="annottext">i_k :: Text
+</span><a href="#local-6989586621679596725"><span class="hs-identifier hs-var">i_k</span></a></span></span><span> </span><span id="local-6989586621679596724"><span class="annot"><span class="annottext">i :: Int
+</span><a href="#local-6989586621679596724"><span class="hs-identifier hs-var">i</span></a></span></span><span> </span><span id="local-6989586621679596723"><span class="annot"><span class="annottext">row :: Row k1 CellValue
+</span><a href="#local-6989586621679596723"><span class="hs-identifier hs-var">row</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679596725"><span class="hs-identifier hs-var">i_k</span></a></span><span> </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Scientific -&gt; Value
+</span><span class="hs-identifier hs-var">JSON.Number</span></span><span> </span><span class="annot"><span class="annottext">(Scientific -&gt; Value) -&gt; Scientific -&gt; Value
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Scientific
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679596724"><span class="hs-identifier hs-var">i</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Pair -&gt; [Pair] -&gt; [Pair]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Map k1 Pair -&gt; [Pair]
+forall k a. Map k a -&gt; [a]
+</span><span class="hs-identifier hs-var">M.elems</span></span><span> </span><span class="annot"><span class="annottext">(Map k1 Pair -&gt; [Pair]) -&gt; Map k1 Pair -&gt; [Pair]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Text -&gt; CellValue -&gt; Pair)
+-&gt; Row k1 Text -&gt; Row k1 CellValue -&gt; Map k1 Pair
+forall k a b c.
+Ord k =&gt;
+(a -&gt; b -&gt; c) -&gt; Map k a -&gt; Map k b -&gt; Map k c
+</span><span class="hs-identifier hs-var">M.intersectionWith</span></span><span> </span><span class="annot"><span class="annottext">Text -&gt; CellValue -&gt; Pair
+forall a. a -&gt; CellValue -&gt; (a, Value)
+</span><a href="#local-6989586621679596720"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">Row k1 Text
+</span><a href="#local-6989586621679596726"><span class="hs-identifier hs-var">fields</span></a></span><span> </span><span class="annot"><span class="annottext">Row k1 CellValue
+</span><a href="#local-6989586621679596723"><span class="hs-identifier hs-var">row</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-50"></span><span>  </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679596720"><span class="annot"><span class="annottext">f :: a -&gt; CellValue -&gt; (a, Value)
+</span><a href="#local-6989586621679596720"><span class="hs-identifier hs-var hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679596719"><span class="annot"><span class="annottext">fieldName :: a
+</span><a href="#local-6989586621679596719"><span class="hs-identifier hs-var">fieldName</span></a></span></span><span> </span><span id="local-6989586621679596718"><span class="annot"><span class="annottext">value :: CellValue
+</span><a href="#local-6989586621679596718"><span class="hs-identifier hs-var">value</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679596719"><span class="hs-identifier hs-var">fieldName</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">CellValue -&gt; Value
+</span><a href="Parse.Xlsx.html#cellValueToValue"><span class="hs-identifier hs-var">cellValueToValue</span></a></span><span> </span><span class="annot"><span class="annottext">CellValue
+</span><a href="#local-6989586621679596718"><span class="hs-identifier hs-var">value</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-51"></span><span>
+</span><span id="line-52"></span><span id="local-6989586621679596876"><span class="annot"><a href="Parse.Xlsx.html#readFieldNames"><span class="hs-identifier hs-type">readFieldNames</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Parse.Xlsx.html#Row"><span class="hs-identifier hs-type">Row</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679596876"><span class="hs-identifier hs-type">k</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Cell</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Parse.Xlsx.html#Row"><span class="hs-identifier hs-type">Row</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679596876"><span class="hs-identifier hs-type">k</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span></span><span>
+</span><span id="line-53"></span><span id="readFieldNames"><span class="annot"><span class="annottext">readFieldNames :: Row k Cell -&gt; Row k Text
+</span><a href="Parse.Xlsx.html#readFieldNames"><span class="hs-identifier hs-var hs-var">readFieldNames</span></a></span></span><span> </span><span id="local-6989586621679596716"><span class="annot"><span class="annottext">cellsX :: Row k Cell
+</span><a href="#local-6989586621679596716"><span class="hs-identifier hs-var">cellsX</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-54"></span><span>  </span><span class="annot"><span class="annottext">(Cell -&gt; Maybe Text) -&gt; Row k Cell -&gt; Row k Text
+forall a b k. (a -&gt; Maybe b) -&gt; Map k a -&gt; Map k b
+</span><span class="hs-identifier hs-var">M.mapMaybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Cell -&gt; Getting (First Text) Cell Text -&gt; Maybe Text
+forall s a. s -&gt; Getting (First a) s a -&gt; Maybe a
+</span><span class="hs-operator hs-var">^?</span></span><span> </span><span class="annot"><span class="annottext">(Maybe CellValue -&gt; Const (First Text) (Maybe CellValue))
+-&gt; Cell -&gt; Const (First Text) Cell
+Lens' Cell (Maybe CellValue)
+</span><span class="hs-identifier hs-var">cellValue</span></span><span> </span><span class="annot"><span class="annottext">((Maybe CellValue -&gt; Const (First Text) (Maybe CellValue))
+ -&gt; Cell -&gt; Const (First Text) Cell)
+-&gt; ((Text -&gt; Const (First Text) Text)
+    -&gt; Maybe CellValue -&gt; Const (First Text) (Maybe CellValue))
+-&gt; Getting (First Text) Cell Text
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(CellValue -&gt; Const (First Text) CellValue)
+-&gt; Maybe CellValue -&gt; Const (First Text) (Maybe CellValue)
+forall a b. Prism (Maybe a) (Maybe b) a b
+</span><span class="hs-identifier hs-var">_Just</span></span><span> </span><span class="annot"><span class="annottext">((CellValue -&gt; Const (First Text) CellValue)
+ -&gt; Maybe CellValue -&gt; Const (First Text) (Maybe CellValue))
+-&gt; ((Text -&gt; Const (First Text) Text)
+    -&gt; CellValue -&gt; Const (First Text) CellValue)
+-&gt; (Text -&gt; Const (First Text) Text)
+-&gt; Maybe CellValue
+-&gt; Const (First Text) (Maybe CellValue)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(Text -&gt; Const (First Text) Text)
+-&gt; CellValue -&gt; Const (First Text) CellValue
+Prism' CellValue Text
+</span><a href="Parse.Xlsx.html#_CellText"><span class="hs-identifier hs-var">_CellText</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Row k Cell
+</span><a href="#local-6989586621679596716"><span class="hs-identifier hs-var">cellsX</span></a></span><span>
+</span><span id="line-55"></span><span>
+</span><span id="line-56"></span><span id="local-6989586621679596872"><span id="local-6989586621679596873"><span id="local-6989586621679596874"><span class="annot"><a href="Parse.Xlsx.html#extractRow"><span class="hs-identifier hs-type">extractRow</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679596874"><span class="hs-identifier hs-type">k2</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="#local-6989586621679596873"><span class="hs-identifier hs-type">a1</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679596873"><span class="hs-identifier hs-type">a1</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Parse.Xlsx.html#Sheet"><span class="hs-identifier hs-type">Sheet</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679596873"><span class="hs-identifier hs-type">a1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679596874"><span class="hs-identifier hs-type">k2</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679596872"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Parse.Xlsx.html#Row"><span class="hs-identifier hs-type">Row</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679596874"><span class="hs-identifier hs-type">k2</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679596872"><span class="hs-identifier hs-type">a</span></a></span></span></span></span><span>
+</span><span id="line-57"></span><span id="extractRow"><span class="annot"><span class="annottext">extractRow :: a1 -&gt; Sheet a1 k2 a -&gt; Row k2 a
+</span><a href="Parse.Xlsx.html#extractRow"><span class="hs-identifier hs-var hs-var">extractRow</span></a></span></span><span> </span><span id="local-6989586621679596711"><span class="annot"><span class="annottext">selectedRow :: a1
+</span><a href="#local-6989586621679596711"><span class="hs-identifier hs-var">selectedRow</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-58"></span><span>  </span><span class="annot"><span class="annottext">((a1, k2) -&gt; k2) -&gt; Sheet a1 k2 a -&gt; Row k2 a
+forall k2 k1 a. Ord k2 =&gt; (k1 -&gt; k2) -&gt; Map k1 a -&gt; Map k2 a
+</span><span class="hs-identifier hs-var">M.mapKeys</span></span><span> </span><span class="annot"><span class="annottext">(a1, k2) -&gt; k2
+forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span> </span><span class="annot"><span class="annottext">(Sheet a1 k2 a -&gt; Row k2 a)
+-&gt; (Sheet a1 k2 a -&gt; Sheet a1 k2 a) -&gt; Sheet a1 k2 a -&gt; Row k2 a
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">((a1, k2) -&gt; a -&gt; Bool) -&gt; Sheet a1 k2 a -&gt; Sheet a1 k2 a
+forall k a. (k -&gt; a -&gt; Bool) -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">M.filterWithKey</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679596708"><span class="annot"><span class="annottext">rc :: (a1, k2)
+</span><a href="#local-6989586621679596708"><span class="hs-identifier hs-var">rc</span></a></span></span><span> </span><span class="hs-identifier">_</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(a1, k2) -&gt; a1
+forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span> </span><span class="annot"><span class="annottext">(a1, k2)
+</span><a href="#local-6989586621679596708"><span class="hs-identifier hs-var">rc</span></a></span><span> </span><span class="annot"><span class="annottext">a1 -&gt; a1 -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">a1
+</span><a href="#local-6989586621679596711"><span class="hs-identifier hs-var">selectedRow</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-59"></span><span>
+</span><span id="line-60"></span><span class="hs-comment">-- Defined Rows are rows which have a value in the first column</span><span>
+</span><span id="line-61"></span><span class="hs-comment">-- Once enough (100) rows that are not defined have been found, we</span><span>
+</span><span id="line-62"></span><span class="hs-comment">-- stop searching</span><span>
+</span><span id="line-63"></span><span id="local-6989586621679596865"><span id="local-6989586621679596866"><span id="local-6989586621679596867"><span class="annot"><a href="Parse.Xlsx.html#extractDefinedRows"><span class="hs-identifier hs-type">extractDefinedRows</span></a></span><span>
+</span><span id="line-64"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679596867"><span class="hs-identifier hs-type">c</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Num</span></span><span> </span><span class="annot"><a href="#local-6989586621679596866"><span class="hs-identifier hs-type">r</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Num</span></span><span> </span><span class="annot"><a href="#local-6989586621679596867"><span class="hs-identifier hs-type">c</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="#local-6989586621679596866"><span class="hs-identifier hs-type">r</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-65"></span><span>  </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679596866"><span class="hs-identifier hs-type">r</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">M.Map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679596866"><span class="hs-identifier hs-type">r</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679596867"><span class="hs-identifier hs-type">c</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679596865"><span class="hs-identifier hs-type">x</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">M.Map</span></span><span> </span><span class="annot"><a href="#local-6989586621679596867"><span class="hs-identifier hs-type">c</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679596865"><span class="hs-identifier hs-type">x</span></a></span><span class="hs-special">]</span></span></span></span><span>
+</span><span id="line-66"></span><span id="extractDefinedRows"><span class="annot"><span class="annottext">extractDefinedRows :: r -&gt; Map (r, c) x -&gt; [Map c x]
+</span><a href="Parse.Xlsx.html#extractDefinedRows"><span class="hs-identifier hs-var hs-var">extractDefinedRows</span></a></span></span><span> </span><span id="local-6989586621679596707"><span class="annot"><span class="annottext">startRow :: r
+</span><a href="#local-6989586621679596707"><span class="hs-identifier hs-var">startRow</span></a></span></span><span> </span><span id="local-6989586621679596706"><span class="annot"><span class="annottext">sheet :: Map (r, c) x
+</span><a href="#local-6989586621679596706"><span class="hs-identifier hs-var">sheet</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-67"></span><span>  </span><span class="annot"><span class="annottext">State Int [Map c x] -&gt; Int -&gt; [Map c x]
+forall s a. State s a -&gt; s -&gt; a
+</span><span class="hs-identifier hs-var">evalState</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">r -&gt; State Int [Map c x]
+forall (m :: * -&gt; *). MonadState Int m =&gt; r -&gt; m [Map c x]
+</span><a href="#local-6989586621679596705"><span class="hs-identifier hs-var">action</span></a></span><span> </span><span class="annot"><span class="annottext">r
+</span><a href="#local-6989586621679596707"><span class="hs-identifier hs-var">startRow</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="hs-number">0</span></span><span>
+</span><span id="line-68"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-69"></span><span>    </span><span id="local-6989586621679596704"><span class="annot"><span class="annottext">stopWhenBadsIs :: Int
+</span><a href="#local-6989586621679596704"><span class="hs-identifier hs-var hs-var">stopWhenBadsIs</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-number">100</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-comment">-- will stop extracting rows when we encounter this many blanks in a row</span><span>
+</span><span id="line-70"></span><span>    </span><span id="local-6989586621679596705"><span class="annot"><span class="annottext">action :: r -&gt; m [Map c x]
+</span><a href="#local-6989586621679596705"><span class="hs-identifier hs-var hs-var">action</span></a></span></span><span> </span><span id="local-6989586621679596703"><span class="annot"><span class="annottext">rowNum :: r
+</span><a href="#local-6989586621679596703"><span class="hs-identifier hs-var">rowNum</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-71"></span><span>      </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679596702"><span class="annot"><span class="annottext">row :: Map c x
+</span><a href="#local-6989586621679596702"><span class="hs-identifier hs-var hs-var">row</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">r -&gt; Map (r, c) x -&gt; Map c x
+forall k2 a1 a. (Ord k2, Eq a1) =&gt; a1 -&gt; Sheet a1 k2 a -&gt; Row k2 a
+</span><a href="Parse.Xlsx.html#extractRow"><span class="hs-identifier hs-var">extractRow</span></a></span><span> </span><span class="annot"><span class="annottext">r
+</span><a href="#local-6989586621679596703"><span class="hs-identifier hs-var">rowNum</span></a></span><span> </span><span class="annot"><span class="annottext">Map (r, c) x
+</span><a href="#local-6989586621679596706"><span class="hs-identifier hs-var">sheet</span></a></span><span>
+</span><span id="line-72"></span><span>          </span><span id="local-6989586621679596701"><span class="annot"><span class="annottext">firstCell :: Maybe x
+</span><a href="#local-6989586621679596701"><span class="hs-identifier hs-var hs-var">firstCell</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Map c x
+</span><a href="#local-6989586621679596702"><span class="hs-identifier hs-var">row</span></a></span><span> </span><span class="annot"><span class="annottext">Map c x -&gt; Getting (First x) (Map c x) x -&gt; Maybe x
+forall s a. s -&gt; Getting (First a) s a -&gt; Maybe a
+</span><span class="hs-operator hs-var">^?</span></span><span> </span><span class="annot"><span class="annottext">Index (Map c x) -&gt; Traversal' (Map c x) (IxValue (Map c x))
+forall m. Ixed m =&gt; Index m -&gt; Traversal' m (IxValue m)
+</span><span class="hs-identifier hs-var">ix</span></span><span> </span><span class="annot"><span class="hs-number">1</span></span><span>
+</span><span id="line-73"></span><span>      </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Maybe x
+</span><a href="#local-6989586621679596701"><span class="hs-identifier hs-var">firstCell</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-74"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-75"></span><span>          </span><span id="local-6989586621679596699"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679596699"><span class="hs-identifier hs-var">numBads</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(Int -&gt; (Int, Int)) -&gt; Int -&gt; (Int, Int)
+forall a. a -&gt; a
+</span><span class="hs-identifier hs-var">id</span></span><span> </span><span class="annot"><span class="annottext">((Int -&gt; (Int, Int)) -&gt; Int -&gt; (Int, Int)) -&gt; (Int -&gt; Int) -&gt; m Int
+forall s (m :: * -&gt; *) b a.
+MonadState s m =&gt;
+LensLike ((,) b) s s a b -&gt; (a -&gt; b) -&gt; m b
+</span><span class="hs-operator hs-var">&lt;%=</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int
+forall a. Enum a =&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">succ</span></span><span>
+</span><span id="line-76"></span><span>          </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679596699"><span class="hs-identifier hs-var">numBads</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&gt;</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679596704"><span class="hs-identifier hs-var">stopWhenBadsIs</span></a></span><span>
+</span><span id="line-77"></span><span>            </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">[Map c x] -&gt; m [Map c x]
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-78"></span><span>            </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">r -&gt; m [Map c x]
+</span><a href="#local-6989586621679596705"><span class="hs-identifier hs-var">action</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">r
+</span><a href="#local-6989586621679596703"><span class="hs-identifier hs-var">rowNum</span></a></span><span> </span><span class="annot"><span class="annottext">r -&gt; r -&gt; r
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="hs-number">1</span></span><span class="hs-special">)</span><span>
+</span><span id="line-79"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="hs-identifier">_</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-80"></span><span>          </span><span class="annot"><span class="annottext">Int -&gt; m ()
+forall s (m :: * -&gt; *). MonadState s m =&gt; s -&gt; m ()
+</span><span class="hs-identifier hs-var">put</span></span><span> </span><span class="annot"><span class="hs-number">0</span></span><span> </span><span class="hs-comment">-- reset the empty row counter</span><span>
+</span><span id="line-81"></span><span>          </span><span id="local-6989586621679596693"><span class="annot"><span class="annottext">[Map c x]
+</span><a href="#local-6989586621679596693"><span class="hs-identifier hs-var">rest</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">r -&gt; m [Map c x]
+</span><a href="#local-6989586621679596705"><span class="hs-identifier hs-var">action</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">r
+</span><a href="#local-6989586621679596703"><span class="hs-identifier hs-var">rowNum</span></a></span><span> </span><span class="annot"><span class="annottext">r -&gt; r -&gt; r
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="hs-number">1</span></span><span class="hs-special">)</span><span>
+</span><span id="line-82"></span><span>          </span><span class="annot"><span class="annottext">[Map c x] -&gt; m [Map c x]
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Map c x
+</span><a href="#local-6989586621679596702"><span class="hs-identifier hs-var">row</span></a></span><span> </span><span class="annot"><span class="annottext">Map c x -&gt; [Map c x] -&gt; [Map c x]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">[Map c x]
+</span><a href="#local-6989586621679596693"><span class="hs-identifier hs-var">rest</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-83"></span><span>
+</span><span id="line-84"></span><span>
+</span><span id="line-85"></span><span class="annot"><a href="Parse.Xlsx.html#cellValueToValue"><span class="hs-identifier hs-type">cellValueToValue</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">CellValue</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">JSON.Value</span></span><span>
+</span><span id="line-86"></span><span id="cellValueToValue"><span class="annot"><span class="annottext">cellValueToValue :: CellValue -&gt; Value
+</span><a href="Parse.Xlsx.html#cellValueToValue"><span class="hs-identifier hs-var hs-var">cellValueToValue</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">CellText</span></span><span> </span><span id="local-6989586621679596691"><span class="annot"><span class="annottext">t :: Text
+</span><a href="#local-6989586621679596691"><span class="hs-identifier hs-var">t</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Text -&gt; Value
+</span><span class="hs-identifier hs-var">JSON.String</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679596691"><span class="hs-identifier hs-var">t</span></a></span><span>
+</span><span id="line-87"></span><span class="annot"><a href="Parse.Xlsx.html#cellValueToValue"><span class="hs-identifier hs-var">cellValueToValue</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">CellDouble</span></span><span> </span><span id="local-6989586621679596688"><span class="annot"><span class="annottext">d :: Double
+</span><a href="#local-6989586621679596688"><span class="hs-identifier hs-var">d</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Scientific -&gt; Value
+</span><span class="hs-identifier hs-var">JSON.Number</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational -&gt; Scientific
+forall a. Fractional a =&gt; Rational -&gt; a
+</span><span class="hs-identifier hs-var">fromRational</span></span><span> </span><span class="annot"><span class="annottext">(Rational -&gt; Scientific)
+-&gt; (Double -&gt; Rational) -&gt; Double -&gt; Scientific
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Double -&gt; Rational
+forall a. Real a =&gt; a -&gt; Rational
+</span><span class="hs-identifier hs-var">toRational</span></span><span> </span><span class="annot"><span class="annottext">(Double -&gt; Scientific) -&gt; Double -&gt; Scientific
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679596688"><span class="hs-identifier hs-var">d</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-88"></span><span class="annot"><a href="Parse.Xlsx.html#cellValueToValue"><span class="hs-identifier hs-var">cellValueToValue</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">CellBool</span></span><span> </span><span id="local-6989586621679596686"><span class="annot"><span class="annottext">b :: Bool
+</span><a href="#local-6989586621679596686"><span class="hs-identifier hs-var">b</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Value
+</span><span class="hs-identifier hs-var">JSON.Bool</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679596686"><span class="hs-identifier hs-var">b</span></a></span><span>
+</span><span id="line-89"></span><span class="annot"><a href="Parse.Xlsx.html#cellValueToValue"><span class="hs-identifier hs-var">cellValueToValue</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">CellRich</span></span><span> </span><span id="local-6989586621679596683"><span class="annot"><span class="annottext">b :: [RichTextRun]
+</span><a href="#local-6989586621679596683"><span class="hs-identifier hs-var">b</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Text -&gt; Value
+</span><span class="hs-identifier hs-var">JSON.String</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[RichTextRun]
+</span><a href="#local-6989586621679596683"><span class="hs-identifier hs-var">b</span></a></span><span> </span><span class="annot"><span class="annottext">[RichTextRun] -&gt; Getting Text [RichTextRun] Text -&gt; Text
+forall s a. s -&gt; Getting a s a -&gt; a
+</span><span class="hs-operator hs-var">^.</span></span><span> </span><span class="annot"><span class="annottext">(RichTextRun -&gt; Const Text RichTextRun)
+-&gt; [RichTextRun] -&gt; Const Text [RichTextRun]
+forall (t :: * -&gt; *) (f :: * -&gt; *) a b.
+(Traversable t, Applicative f) =&gt;
+(a -&gt; f b) -&gt; t a -&gt; f (t b)
+</span><span class="hs-identifier hs-var">traverse</span></span><span> </span><span class="annot"><span class="annottext">((RichTextRun -&gt; Const Text RichTextRun)
+ -&gt; [RichTextRun] -&gt; Const Text [RichTextRun])
+-&gt; ((Text -&gt; Const Text Text)
+    -&gt; RichTextRun -&gt; Const Text RichTextRun)
+-&gt; Getting Text [RichTextRun] Text
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(Text -&gt; Const Text Text) -&gt; RichTextRun -&gt; Const Text RichTextRun
+Lens' RichTextRun Text
+</span><span class="hs-identifier hs-var">richTextRunText</span></span><span class="hs-special">)</span><span>
+</span><span id="line-90"></span><span class="annot"><a href="Parse.Xlsx.html#cellValueToValue"><span class="hs-identifier hs-var">cellValueToValue</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">CellError</span></span><span> </span><span class="hs-identifier">_</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Value
+</span><span class="hs-identifier hs-var">JSON.Null</span></span><span>
+</span><span id="line-91"></span><span>
+</span><span id="line-92"></span><span class="hs-comment">-- | Supporting Things</span><span>
+</span><span id="line-93"></span><span>
+</span><span id="line-94"></span><span class="annot"><a href="Parse.Xlsx.html#_CellText"><span class="hs-identifier hs-type">_CellText</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Prism'</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">CellValue</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">T.Text</span></span><span>
+</span><span id="line-95"></span><span id="_CellText"><span class="annot"><span class="annottext">_CellText :: p Text (f Text) -&gt; p CellValue (f CellValue)
+</span><a href="Parse.Xlsx.html#_CellText"><span class="hs-identifier hs-var hs-var">_CellText</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Text -&gt; CellValue)
+-&gt; (CellValue -&gt; Maybe Text) -&gt; Prism' CellValue Text
+forall b s a. (b -&gt; s) -&gt; (s -&gt; Maybe a) -&gt; Prism s s a b
+</span><span class="hs-identifier hs-var">prism'</span></span><span> </span><span class="annot"><span class="annottext">Text -&gt; CellValue
+</span><span class="hs-identifier hs-var">CellText</span></span><span> </span><span class="annot"><span class="annottext">CellValue -&gt; Maybe Text
+</span><a href="#local-6989586621679596676"><span class="hs-identifier hs-var">g</span></a></span><span>
+</span><span id="line-96"></span><span> </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679596676"><span class="annot"><span class="annottext">g :: CellValue -&gt; Maybe Text
+</span><a href="#local-6989586621679596676"><span class="hs-identifier hs-var hs-var">g</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">CellText</span></span><span> </span><span id="local-6989586621679596675"><span class="annot"><span class="annottext">t :: Text
+</span><a href="#local-6989586621679596675"><span class="hs-identifier hs-var">t</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Text -&gt; Maybe Text
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679596675"><span class="hs-identifier hs-var">t</span></a></span><span>
+</span><span id="line-97"></span><span>       </span><span class="annot"><a href="#local-6989586621679596676"><span class="hs-identifier hs-var">g</span></a></span><span> </span><span class="hs-identifier">_</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe Text
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span></pre></body></html>

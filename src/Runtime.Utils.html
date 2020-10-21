@@ -1,0 +1,167 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE CPP, OverloadedStrings #-}</span><span>
+</span><span id="line-2"></span><span>
+</span><span id="line-3"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Runtime.Utils</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-4"></span><span>
+</span><span id="line-5"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.String</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">IsString</span></span><span class="hs-special">)</span><span>
+</span><span id="line-6"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Aeson</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Value</span></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">encode</span></span><span class="hs-special">)</span><span>
+</span><span id="line-7"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.HashMap.Strict</span></span><span>           </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">HM</span></span><span>
+</span><span id="line-8"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Vector</span></span><span>                   </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">V</span></span><span>
+</span><span id="line-9"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.List</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">intersperse</span></span><span class="hs-special">)</span><span>
+</span><span id="line-10"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.String.Conv</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">StringConv</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">toS</span></span><span class="hs-special">)</span><span>
+</span><span id="line-11"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.ByteString.Lazy</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">ByteString</span></span><span class="hs-special">)</span><span>
+</span><span id="line-12"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Text</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Text</span></span><span class="hs-special">)</span><span>
+</span><span id="line-13"></span><span>
+</span><span id="line-14"></span><span id="local-6989586621679597212"><span class="annot"><a href="Runtime.Utils.html#red"><span class="hs-identifier hs-type">red</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Runtime.Utils.html#green"><span class="hs-identifier hs-type">green</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Runtime.Utils.html#yellow"><span class="hs-identifier hs-type">yellow</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Runtime.Utils.html#blue"><span class="hs-identifier hs-type">blue</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IsString</span></span><span> </span><span class="annot"><a href="#local-6989586621679597212"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679597212"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-15"></span><span id="red"><span class="annot"><span class="annottext">red :: a
+</span><a href="Runtime.Utils.html#red"><span class="hs-identifier hs-var hs-var">red</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-string">&quot;\ESC[031m&quot;</span></span><span>
+</span><span id="line-16"></span><span id="green"><span class="annot"><span class="annottext">green :: a
+</span><a href="Runtime.Utils.html#green"><span class="hs-identifier hs-var hs-var">green</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-string">&quot;\ESC[032m&quot;</span></span><span>
+</span><span id="line-17"></span><span id="yellow"><span class="annot"><span class="annottext">yellow :: a
+</span><a href="Runtime.Utils.html#yellow"><span class="hs-identifier hs-var hs-var">yellow</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-string">&quot;\ESC[033m&quot;</span></span><span>
+</span><span id="line-18"></span><span id="blue"><span class="annot"><span class="annottext">blue :: a
+</span><a href="Runtime.Utils.html#blue"><span class="hs-identifier hs-var hs-var">blue</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-string">&quot;\ESC[034m&quot;</span></span><span>
+</span><span id="line-19"></span><span>
+</span><span id="line-20"></span><span id="local-6989586621679597213"><span class="annot"><a href="Runtime.Utils.html#color"><span class="hs-identifier hs-type">color</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Semigroup</span></span><span> </span><span class="annot"><a href="#local-6989586621679597213"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IsString</span></span><span> </span><span class="annot"><a href="#local-6989586621679597213"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679597213"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679597213"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679597213"><span class="hs-identifier hs-type">a</span></a></span></span><span class="hs-cpp">
+#if defined(mingw32_HOST_OS)
+</span><span class="hs-identifier">color</span><span> </span><span class="hs-identifier">_</span><span> </span><span class="hs-identifier">s</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-identifier">s</span><span class="hs-cpp">
+#else
+</span><span id="color"><span class="annot"><span class="annottext">color :: a -&gt; a -&gt; a
+</span><a href="Runtime.Utils.html#color"><span class="hs-identifier hs-var hs-var">color</span></a></span></span><span> </span><span id="local-6989586621679597190"><span class="annot"><span class="annottext">c :: a
+</span><a href="#local-6989586621679597190"><span class="hs-identifier hs-var">c</span></a></span></span><span> </span><span id="local-6989586621679597189"><span class="annot"><span class="annottext">s :: a
+</span><a href="#local-6989586621679597189"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679597190"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679597189"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="hs-string">&quot;\ESC[0m&quot;</span></span><span class="hs-cpp">
+#endif
+</span><span>
+</span><span id="line-27"></span><span>
+</span><span id="line-28"></span><span id="local-6989586621679597220"><span class="annot"><a href="Runtime.Utils.html#intercalate"><span class="hs-identifier hs-type">intercalate</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">IsString</span></span><span> </span><span class="annot"><a href="#local-6989586621679597220"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Semigroup</span></span><span> </span><span class="annot"><a href="#local-6989586621679597220"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679597220"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679597220"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679597220"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-29"></span><span id="intercalate"><span class="annot"><span class="annottext">intercalate :: a -&gt; [a] -&gt; a
+</span><a href="Runtime.Utils.html#intercalate"><span class="hs-identifier hs-var hs-var">intercalate</span></a></span></span><span> </span><span id="local-6989586621679597187"><span class="annot"><span class="annottext">s :: a
+</span><a href="#local-6989586621679597187"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(a -&gt; a -&gt; a) -&gt; a -&gt; [a] -&gt; a
+forall (t :: * -&gt; *) a b.
+Foldable t =&gt;
+(a -&gt; b -&gt; b) -&gt; b -&gt; t a -&gt; b
+</span><span class="hs-identifier hs-var">foldr</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">(&lt;&gt;)</span></span><span> </span><span class="annot"><span class="hs-string">&quot;&quot;</span></span><span> </span><span class="annot"><span class="annottext">([a] -&gt; a) -&gt; ([a] -&gt; [a]) -&gt; [a] -&gt; a
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; [a] -&gt; [a]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">intersperse</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679597187"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-30"></span><span>
+</span><span id="line-31"></span><span id="local-6989586621679597208"><span class="annot"><a href="Runtime.Utils.html#colorJSON"><span class="hs-identifier hs-type">colorJSON</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">IsString</span></span><span> </span><span class="annot"><a href="#local-6989586621679597208"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Semigroup</span></span><span> </span><span class="annot"><a href="#local-6989586621679597208"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">StringConv</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">ByteString</span></span><span> </span><span class="annot"><a href="#local-6989586621679597208"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">StringConv</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span> </span><span class="annot"><a href="#local-6989586621679597208"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Value</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679597208"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-32"></span><span id="colorJSON"><span class="annot"><span class="annottext">colorJSON :: Value -&gt; a
+</span><a href="Runtime.Utils.html#colorJSON"><span class="hs-identifier hs-var hs-var">colorJSON</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Object</span></span><span> </span><span id="local-6989586621679597182"><span class="annot"><span class="annottext">o :: Object
+</span><a href="#local-6989586621679597182"><span class="hs-identifier hs-var">o</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-string">&quot;{&quot;</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; [a] -&gt; a
+forall a. (IsString a, Semigroup a) =&gt; a -&gt; [a] -&gt; a
+</span><a href="Runtime.Utils.html#intercalate"><span class="hs-identifier hs-var">intercalate</span></a></span><span> </span><span class="annot"><span class="hs-string">&quot;, &quot;</span></span><span> </span><span class="annot"><span class="annottext">([a] -&gt; a) -&gt; [a] -&gt; a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">((Text, Value) -&gt; a) -&gt; [(Text, Value)] -&gt; [a]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span class="hs-special">(</span><span id="local-6989586621679597181"><span class="annot"><span class="annottext">k :: Text
+</span><a href="#local-6989586621679597181"><span class="hs-identifier hs-var">k</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679597180"><span class="annot"><span class="annottext">v :: Value
+</span><a href="#local-6989586621679597180"><span class="hs-identifier hs-var">v</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. (Semigroup a, IsString a) =&gt; a -&gt; a -&gt; a
+</span><a href="Runtime.Utils.html#color"><span class="hs-identifier hs-var">color</span></a></span><span> </span><span class="annot"><span class="annottext">a
+forall a. IsString a =&gt; a
+</span><a href="Runtime.Utils.html#blue"><span class="hs-identifier hs-var">blue</span></a></span><span> </span><span class="annot"><span class="annottext">(a -&gt; a) -&gt; a -&gt; a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="hs-string">&quot;\&quot;&quot;</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">Text -&gt; a
+forall a b. StringConv a b =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">toS</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679597181"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="hs-string">&quot;\&quot;&quot;</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="hs-string">&quot;: &quot;</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">Value -&gt; a
+forall a.
+(IsString a, Semigroup a, StringConv ByteString a,
+ StringConv Text a) =&gt;
+Value -&gt; a
+</span><a href="Runtime.Utils.html#colorJSON"><span class="hs-identifier hs-var">colorJSON</span></a></span><span> </span><span class="annot"><span class="annottext">Value
+</span><a href="#local-6989586621679597180"><span class="hs-identifier hs-var">v</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">([(Text, Value)] -&gt; [a]) -&gt; [(Text, Value)] -&gt; [a]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Object -&gt; [(Text, Value)]
+forall k v. HashMap k v -&gt; [(k, v)]
+</span><span class="hs-identifier hs-var">HM.toList</span></span><span> </span><span class="annot"><span class="annottext">Object
+</span><a href="#local-6989586621679597182"><span class="hs-identifier hs-var">o</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="hs-string">&quot;}&quot;</span></span><span>
+</span><span id="line-33"></span><span class="annot"><a href="Runtime.Utils.html#colorJSON"><span class="hs-identifier hs-var">colorJSON</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Array</span></span><span> </span><span id="local-6989586621679597177"><span class="annot"><span class="annottext">a :: Array
+</span><a href="#local-6989586621679597177"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-string">&quot;[&quot;</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; [a] -&gt; a
+forall a. (IsString a, Semigroup a) =&gt; a -&gt; [a] -&gt; a
+</span><a href="Runtime.Utils.html#intercalate"><span class="hs-identifier hs-var">intercalate</span></a></span><span> </span><span class="annot"><span class="hs-string">&quot;, &quot;</span></span><span> </span><span class="annot"><span class="annottext">([a] -&gt; a) -&gt; [a] -&gt; a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Value -&gt; a) -&gt; [Value] -&gt; [a]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">Value -&gt; a
+forall a.
+(IsString a, Semigroup a, StringConv ByteString a,
+ StringConv Text a) =&gt;
+Value -&gt; a
+</span><a href="Runtime.Utils.html#colorJSON"><span class="hs-identifier hs-var">colorJSON</span></a></span><span> </span><span class="annot"><span class="annottext">([Value] -&gt; [a]) -&gt; [Value] -&gt; [a]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Array -&gt; [Value]
+forall a. Vector a -&gt; [a]
+</span><span class="hs-identifier hs-var">V.toList</span></span><span> </span><span class="annot"><span class="annottext">Array
+</span><a href="#local-6989586621679597177"><span class="hs-identifier hs-var">a</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="hs-string">&quot;]&quot;</span></span><span>
+</span><span id="line-34"></span><span class="annot"><a href="Runtime.Utils.html#colorJSON"><span class="hs-identifier hs-var">colorJSON</span></a></span><span> </span><span id="local-6989586621679597175"><span class="annot"><span class="annottext">s :: Value
+</span><a href="#local-6989586621679597175"><span class="hs-identifier hs-var">s</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-identifier">_</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. (Semigroup a, IsString a) =&gt; a -&gt; a -&gt; a
+</span><a href="Runtime.Utils.html#color"><span class="hs-identifier hs-var">color</span></a></span><span> </span><span class="annot"><span class="annottext">a
+forall a. IsString a =&gt; a
+</span><a href="Runtime.Utils.html#blue"><span class="hs-identifier hs-var">blue</span></a></span><span> </span><span class="annot"><span class="annottext">(a -&gt; a) -&gt; a -&gt; a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">ByteString -&gt; a
+forall a b. StringConv a b =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">toS</span></span><span> </span><span class="annot"><span class="annottext">(ByteString -&gt; a) -&gt; ByteString -&gt; a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Value -&gt; ByteString
+forall a. ToJSON a =&gt; a -&gt; ByteString
+</span><span class="hs-identifier hs-var">encode</span></span><span> </span><span class="annot"><span class="annottext">Value
+</span><a href="#local-6989586621679597175"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-35"></span><span class="annot"><a href="Runtime.Utils.html#colorJSON"><span class="hs-identifier hs-var">colorJSON</span></a></span><span> </span><span id="local-6989586621679597173"><span class="annot"><span class="annottext">n :: Value
+</span><a href="#local-6989586621679597173"><span class="hs-identifier hs-var">n</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Number</span></span><span> </span><span class="hs-identifier">_</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. (Semigroup a, IsString a) =&gt; a -&gt; a -&gt; a
+</span><a href="Runtime.Utils.html#color"><span class="hs-identifier hs-var">color</span></a></span><span> </span><span class="annot"><span class="annottext">a
+forall a. IsString a =&gt; a
+</span><a href="Runtime.Utils.html#green"><span class="hs-identifier hs-var">green</span></a></span><span> </span><span class="annot"><span class="annottext">(a -&gt; a) -&gt; a -&gt; a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">ByteString -&gt; a
+forall a b. StringConv a b =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">toS</span></span><span> </span><span class="annot"><span class="annottext">(ByteString -&gt; a) -&gt; ByteString -&gt; a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Value -&gt; ByteString
+forall a. ToJSON a =&gt; a -&gt; ByteString
+</span><span class="hs-identifier hs-var">encode</span></span><span> </span><span class="annot"><span class="annottext">Value
+</span><a href="#local-6989586621679597173"><span class="hs-identifier hs-var">n</span></a></span><span>
+</span><span id="line-36"></span><span class="annot"><a href="Runtime.Utils.html#colorJSON"><span class="hs-identifier hs-var">colorJSON</span></a></span><span> </span><span id="local-6989586621679597171"><span class="annot"><span class="annottext">rest :: Value
+</span><a href="#local-6989586621679597171"><span class="hs-identifier hs-var">rest</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. (Semigroup a, IsString a) =&gt; a -&gt; a -&gt; a
+</span><a href="Runtime.Utils.html#color"><span class="hs-identifier hs-var">color</span></a></span><span> </span><span class="annot"><span class="annottext">a
+forall a. IsString a =&gt; a
+</span><a href="Runtime.Utils.html#yellow"><span class="hs-identifier hs-var">yellow</span></a></span><span> </span><span class="annot"><span class="annottext">(a -&gt; a) -&gt; a -&gt; a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">ByteString -&gt; a
+forall a b. StringConv a b =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">toS</span></span><span> </span><span class="annot"><span class="annottext">(ByteString -&gt; a) -&gt; ByteString -&gt; a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Value -&gt; ByteString
+forall a. ToJSON a =&gt; a -&gt; ByteString
+</span><span class="hs-identifier hs-var">encode</span></span><span> </span><span class="annot"><span class="annottext">Value
+</span><a href="#local-6989586621679597171"><span class="hs-identifier hs-var">rest</span></a></span></pre></body></html>

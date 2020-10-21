@@ -1,0 +1,126 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-#LANGUAGE QuasiQuotes, DerivingStrategies, GeneralizedNewtypeDeriving #-}</span><span>
+</span><span id="line-2"></span><span>
+</span><span id="line-3"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">DB.Types</span><span class="hs-special">(</span><span>
+</span><span id="line-4"></span><span>  </span><span class="annot"><a href="DB.Types.html#SourceID"><span class="hs-identifier">SourceID</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="DB.Types.html#SubjectID"><span class="hs-identifier">SubjectID</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="DB.Types.html#FileID"><span class="hs-identifier">FileID</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="DB.Types.html#User"><span class="hs-identifier">User</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="DB.Types.html#Password"><span class="hs-identifier">Password</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="DB.Types.html#Host"><span class="hs-identifier">Host</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="DB.Types.html#Port"><span class="hs-identifier">Port</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="DB.Types.html#Database"><span class="hs-identifier">Database</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-5"></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-6"></span><span>
+</span><span id="line-7"></span><span class="hs-keyword">newtype</span><span> </span><span id="SourceID"><span class="annot"><a href="DB.Types.html#SourceID"><span class="hs-identifier hs-var">SourceID</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="SourceID"><span class="annot"><a href="DB.Types.html#SourceID"><span class="hs-identifier hs-var">SourceID</span></a></span></span><span> </span><span class="hs-special">{</span><span id="unSourceID"><span class="annot"><span class="annottext">SourceID -&gt; Int
+</span><a href="DB.Types.html#unSourceID"><span class="hs-identifier hs-var hs-var">unSourceID</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span class="hs-special">}</span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679596131"><span id="local-6989586621679596133"><span id="local-6989586621679596135"><span id="local-6989586621679596137"><span class="annot"><span class="annottext">ReadPrec [SourceID]
+ReadPrec SourceID
+Int -&gt; ReadS SourceID
+ReadS [SourceID]
+(Int -&gt; ReadS SourceID)
+-&gt; ReadS [SourceID]
+-&gt; ReadPrec SourceID
+-&gt; ReadPrec [SourceID]
+-&gt; Read SourceID
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [SourceID]
+$creadListPrec :: ReadPrec [SourceID]
+readPrec :: ReadPrec SourceID
+$creadPrec :: ReadPrec SourceID
+readList :: ReadS [SourceID]
+$creadList :: ReadS [SourceID]
+readsPrec :: Int -&gt; ReadS SourceID
+$creadsPrec :: Int -&gt; ReadS SourceID
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679596124"><span id="local-6989586621679596126"><span id="local-6989586621679596128"><span class="annot"><span class="annottext">Int -&gt; SourceID -&gt; ShowS
+[SourceID] -&gt; ShowS
+SourceID -&gt; String
+(Int -&gt; SourceID -&gt; ShowS)
+-&gt; (SourceID -&gt; String) -&gt; ([SourceID] -&gt; ShowS) -&gt; Show SourceID
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [SourceID] -&gt; ShowS
+$cshowList :: [SourceID] -&gt; ShowS
+show :: SourceID -&gt; String
+$cshow :: SourceID -&gt; String
+showsPrec :: Int -&gt; SourceID -&gt; ShowS
+$cshowsPrec :: Int -&gt; SourceID -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679596119"><span id="local-6989586621679596121"><span class="annot"><span class="annottext">SourceID -&gt; SourceID -&gt; Bool
+(SourceID -&gt; SourceID -&gt; Bool)
+-&gt; (SourceID -&gt; SourceID -&gt; Bool) -&gt; Eq SourceID
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+/= :: SourceID -&gt; SourceID -&gt; Bool
+$c/= :: SourceID -&gt; SourceID -&gt; Bool
+== :: SourceID -&gt; SourceID -&gt; Bool
+$c== :: SourceID -&gt; SourceID -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-8"></span><span>
+</span><span id="line-9"></span><span class="hs-keyword">newtype</span><span> </span><span id="SubjectID"><span class="annot"><a href="DB.Types.html#SubjectID"><span class="hs-identifier hs-var">SubjectID</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="SubjectID"><span class="annot"><a href="DB.Types.html#SubjectID"><span class="hs-identifier hs-var">SubjectID</span></a></span></span><span> </span><span class="hs-special">{</span><span id="unSubjectID"><span class="annot"><span class="annottext">SubjectID -&gt; String
+</span><a href="DB.Types.html#unSubjectID"><span class="hs-identifier hs-var hs-var">unSubjectID</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">}</span><span>
+</span><span id="line-10"></span><span>
+</span><span id="line-11"></span><span class="hs-keyword">newtype</span><span> </span><span id="FileID"><span class="annot"><a href="DB.Types.html#FileID"><span class="hs-identifier hs-var">FileID</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="FileID"><span class="annot"><a href="DB.Types.html#FileID"><span class="hs-identifier hs-var">FileID</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span>
+</span><span id="line-12"></span><span>
+</span><span id="line-13"></span><span class="hs-keyword">newtype</span><span> </span><span id="User"><span class="annot"><a href="DB.Types.html#User"><span class="hs-identifier hs-var">User</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="User"><span class="annot"><a href="DB.Types.html#User"><span class="hs-identifier hs-var">User</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-keyword">deriving</span><span> </span><span id="local-6989586621679596108"><span id="local-6989586621679596110"><span id="local-6989586621679596112"><span class="annot"><span class="annottext">Int -&gt; User -&gt; ShowS
+[User] -&gt; ShowS
+User -&gt; String
+(Int -&gt; User -&gt; ShowS)
+-&gt; (User -&gt; String) -&gt; ([User] -&gt; ShowS) -&gt; Show User
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [User] -&gt; ShowS
+$cshowList :: [User] -&gt; ShowS
+show :: User -&gt; String
+$cshow :: User -&gt; String
+showsPrec :: Int -&gt; User -&gt; ShowS
+$cshowsPrec :: Int -&gt; User -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span>
+</span><span id="line-14"></span><span class="hs-keyword">newtype</span><span> </span><span id="Password"><span class="annot"><a href="DB.Types.html#Password"><span class="hs-identifier hs-var">Password</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Password"><span class="annot"><a href="DB.Types.html#Password"><span class="hs-identifier hs-var">Password</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-keyword">deriving</span><span> </span><span id="local-6989586621679596101"><span id="local-6989586621679596103"><span id="local-6989586621679596105"><span class="annot"><span class="annottext">Int -&gt; Password -&gt; ShowS
+[Password] -&gt; ShowS
+Password -&gt; String
+(Int -&gt; Password -&gt; ShowS)
+-&gt; (Password -&gt; String) -&gt; ([Password] -&gt; ShowS) -&gt; Show Password
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [Password] -&gt; ShowS
+$cshowList :: [Password] -&gt; ShowS
+show :: Password -&gt; String
+$cshow :: Password -&gt; String
+showsPrec :: Int -&gt; Password -&gt; ShowS
+$cshowsPrec :: Int -&gt; Password -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span>
+</span><span id="line-15"></span><span class="hs-keyword">newtype</span><span> </span><span id="Host"><span class="annot"><a href="DB.Types.html#Host"><span class="hs-identifier hs-var">Host</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Host"><span class="annot"><a href="DB.Types.html#Host"><span class="hs-identifier hs-var">Host</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>  </span><span class="hs-keyword">deriving</span><span> </span><span id="local-6989586621679596094"><span id="local-6989586621679596096"><span id="local-6989586621679596098"><span class="annot"><span class="annottext">Int -&gt; Host -&gt; ShowS
+[Host] -&gt; ShowS
+Host -&gt; String
+(Int -&gt; Host -&gt; ShowS)
+-&gt; (Host -&gt; String) -&gt; ([Host] -&gt; ShowS) -&gt; Show Host
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [Host] -&gt; ShowS
+$cshowList :: [Host] -&gt; ShowS
+show :: Host -&gt; String
+$cshow :: Host -&gt; String
+showsPrec :: Int -&gt; Host -&gt; ShowS
+$cshowsPrec :: Int -&gt; Host -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span>
+</span><span id="line-16"></span><span class="hs-keyword">newtype</span><span> </span><span id="Port"><span class="annot"><a href="DB.Types.html#Port"><span class="hs-identifier hs-var">Port</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Port"><span class="annot"><a href="DB.Types.html#Port"><span class="hs-identifier hs-var">Port</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">deriving</span><span> </span><span id="local-6989586621679596087"><span id="local-6989586621679596089"><span id="local-6989586621679596091"><span class="annot"><span class="annottext">Int -&gt; Port -&gt; ShowS
+[Port] -&gt; ShowS
+Port -&gt; String
+(Int -&gt; Port -&gt; ShowS)
+-&gt; (Port -&gt; String) -&gt; ([Port] -&gt; ShowS) -&gt; Show Port
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [Port] -&gt; ShowS
+$cshowList :: [Port] -&gt; ShowS
+show :: Port -&gt; String
+$cshow :: Port -&gt; String
+showsPrec :: Int -&gt; Port -&gt; ShowS
+$cshowsPrec :: Int -&gt; Port -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span>
+</span><span id="line-17"></span><span class="hs-keyword">newtype</span><span> </span><span id="Database"><span class="annot"><a href="DB.Types.html#Database"><span class="hs-identifier hs-var">Database</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Database"><span class="annot"><a href="DB.Types.html#Database"><span class="hs-identifier hs-var">Database</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-keyword">deriving</span><span> </span><span id="local-6989586621679596080"><span id="local-6989586621679596082"><span id="local-6989586621679596084"><span class="annot"><span class="annottext">Int -&gt; Database -&gt; ShowS
+[Database] -&gt; ShowS
+Database -&gt; String
+(Int -&gt; Database -&gt; ShowS)
+-&gt; (Database -&gt; String) -&gt; ([Database] -&gt; ShowS) -&gt; Show Database
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [Database] -&gt; ShowS
+$cshowList :: [Database] -&gt; ShowS
+show :: Database -&gt; String
+$cshow :: Database -&gt; String
+showsPrec :: Int -&gt; Database -&gt; ShowS
+$cshowsPrec :: Int -&gt; Database -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span>
+</span><span id="line-18"></span></pre></body></html>

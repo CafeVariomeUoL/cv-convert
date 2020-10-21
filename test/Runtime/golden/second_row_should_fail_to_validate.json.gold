@@ -1,5 +1,5 @@
 Error on line 1: Failed to validate against the schema '#/definitions/default'.
 The required properties "age" are not present in:
 {"name":"Joe","heart_rate":[130,95],"blood_pressure":[{"sys":115,"dia":70},{"sys":103,"dia":66}],"subject_id":1,"i":1}
-Input: {"name":"Joe","heart_rate":[130,95],"blood_pressure":[{"sys":115,"dia":70},{"sys":103,"dia":66}],"subject_id":1,"i":1}
+Input:  {"name":"Joe","heart_rate":[130,95],"blood_pressure":[{"sys":115,"dia":70},{"sys":103,"dia":66}],"subject_id":1,"i":1}
 Output: {"name":"Joe","heart_rate":[130,95],"blood_pressure":[{"sys":115,"dia":70},{"sys":103,"dia":66}],"subject_id":1,"i":1}

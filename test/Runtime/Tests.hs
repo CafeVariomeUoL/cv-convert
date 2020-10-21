@@ -228,7 +228,8 @@ testProcessFileWithDB c@(SomeDBType Postgres, user, pass, host, port, db) file f
       file
       JSONFile
       (DBOutputOpt c $ SourceID 1)
-      Log
+      LogToDB
+      (TerminateOnError False)
   bracket (DB.connect @Connection user pass host port db) DB.disconnect $ \con -> do
     res <- selectAllFromEAVS_JSONB (takeFileName file) con
     res @?= expected
@@ -247,7 +248,8 @@ testProcessFileWithDB c@(SomeDBType MySQL, user, pass, host, port, db) file file
       file
       JSONFile
       (DBOutputOpt c $ SourceID 1)
-      Log
+      LogToDB
+      (TerminateOnError False)
   return ()
   where
     rowFun row header = call "rowFun" [row, header]
@@ -317,7 +319,8 @@ testProcessFile inFile rowFunFile = do
       inFile
       (fileType openAs)
       JSONFileOutputOpt
-      Terminate
+      LogToConsole
+      (TerminateOnError True)
     case res of
       Left (e :: RowError) -> liftIO $ withUtf8 $ writeFile (inFile <.> "out.json") $ show e
       -- in case we want to output RowError as JSON?

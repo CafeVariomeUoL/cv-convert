@@ -22,17 +22,16 @@ import           Control.Monad.IO.Class(MonadIO, liftIO)
 import           Control.Monad.Catch   (MonadThrow(..))
 import           Data.Foldable         (foldlM)
 
-import           Runtime.Error         (SubjectIDNotFound(..))
-import           Quickjs.Error         (InternalError(..))
+import           Runtime.Error         (RuntimeError(..), SubjectIDNotFound(..))
 import           DB                    (SubjectID(..))
 
 
 getSubjectID :: MonadThrow m => Value -> m SubjectID
-getSubjectID (Object m) = case HM.lookup "subject_id" m of
+getSubjectID o@(Object m) = case HM.lookup "subject_id" m of
   Just (String x) -> return $ SubjectID $ toS x
   Just x -> return $ SubjectID $ toS $ encode x
-  Nothing ->  throwM $ SubjectIDNotFound
-getSubjectID o = throwM $ InternalError $ "Expected " <> toS (encode o) <> " to be an object."
+  Nothing ->  throwM $ SubjectIDNotFound o
+getSubjectID o = throwM $ RuntimeError $ "Expected " <> toS (encode o) <> " to be an object."
 
 
 {-|

@@ -142,12 +142,12 @@ packages:
   original:
     hackage: wire-streams-0.1.1.0@sha256:08816c7fa53b20f52e5c465252c106d9de8e6d9580ec0b6d9f000a34c7bcefc8,2130
 - completed:
-    hackage: quickjs-hs-0.1.2.1@sha256:4731eed7fdeb098ca2b43a8e9a30eb7f41b923f44dd996ad137e6aa1014a2838,2917
+    hackage: quickjs-hs-0.1.2.3@sha256:c515da37d7679c8c37bbdc7a221f24896b644f3e8c2ce8b9d5e19f31e5e4bf87,2801
     pantry-tree:
       size: 1529
-      sha256: 7c797d863a1af431958e8fbd62aa41c8ef20ed9557af5b689c50608a8e6fa790
+      sha256: be3f75718192107296da5c384dce441600603ffc381aba45bdcbed33ff48a61e
   original:
-    hackage: quickjs-hs-0.1.2.1
+    hackage: quickjs-hs-0.1.2.3
 snapshots:
 - completed:
     size: 496111

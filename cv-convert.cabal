@@ -1,5 +1,5 @@
 name:                cv-convert
-version:             0.5.1
+version:             0.5.2
 build-type:          Simple
 cabal-version:       >= 1.25
 description: This tool is intended to be used inside CafeVariome to convert 
@@ -103,7 +103,7 @@ library
   hs-source-dirs:
     src
   exposed-modules:
-    Runtime, Runtime.Types, Runtime.Error, JSON.Utils, DB, DB.Postgres, DB.MySQL
+    Runtime, Runtime.Types, Runtime.Error, Runtime.Utils, JSON.Utils, DB, DB.Postgres, DB.MySQL
   other-modules:
     Parse.Xlsx, Parse.Csv, Parse.Utils, Schema, DB.Types, DB.Utils, Paths_cv_convert
   default-language:

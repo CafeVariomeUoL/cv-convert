@@ -254,6 +254,10 @@ data ValidatorFailureError = ValidatorFailureError {
 instance Show ValidatorFailureError where
     show ValidatorFailureError{..} = intercalate "\n" $ map pValidatorFailure errors
 
+instance ShowColor ValidatorFailureError where
+    showColor e = show e
+
+
 
 
 validate :: MonadThrow m => (Value -> [ValidatorFailure]) -> Value -> m ()

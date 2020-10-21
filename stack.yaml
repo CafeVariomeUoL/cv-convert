@@ -62,7 +62,10 @@ extra-deps:
   commit: b01d9f518e3614c9ee5580e64d61400ed8ab5b39
 - tcp-streams-1.0.1.1@sha256:35e9ecfa515797052f8c3c01834d2daebd5e93f3152c7fc98b32652bf6f0c052,2329
 - wire-streams-0.1.1.0@sha256:08816c7fa53b20f52e5c465252c106d9de8e6d9580ec0b6d9f000a34c7bcefc8,2130
-- quickjs-hs-0.1.2.1
+# - git: https://github.com/goodlyrottenapple/quickjs-hs.git
+#   commit: 446f7df2bd5ba9accde7dcf9af253ec9f5c6d553
+- quickjs-hs-0.1.2.3
+
 
 allow-newer: true
 

@@ -12,7 +12,7 @@ Maintainer  : sam@definitelynotspam.email
 
 The runtime module exports the main functionality of the cv-convert tool.
 -}
-module Runtime(SourceID, DataOutputOpt(..), ErrorOpt(..), FileType(..), SheetName, LibFunctions(..), Settings(..), loadLibrary, fromSpecifiedFileType, processFile, compileSchema) where
+module Runtime(SourceID, DataOutputOpt(..), ErrorOpt(..), TerminateOnError(..), FileType(..), SheetName, LibFunctions(..), Settings(..), loadLibrary, fromSpecifiedFileType, processFile, compileSchema) where
 
 import           Main.Utf8                     (withUtf8)
 import           System.IO                     (openFile, IOMode(..), hClose)
@@ -43,6 +43,7 @@ import           Network.Wreq                  (get, responseBody)
 import           Runtime.Types
 import           Runtime.Error
 import           Quickjs                      (JSValue, JSContextPtr, eval_, withJSValue)
+import           Quickjs.Error                (SomeJSRuntimeException)
 import           Schema                       (compileSchema, validate, ValidatorFailure)
 import           Parse.Xlsx                   (readXlsxFile)
 import           Parse.Csv                    (readCsvFile)
@@ -102,25 +103,25 @@ When inserting into database, the output is stored in two different tables:
 
 Finally, we return result of running 'createAllPathsWithValues' on the JSON output data.
 -}
-convertRow :: (MonadMask m, MonadIO m) =>
+convertRow :: (MonadReader JSContextPtr m, MonadMask m, MonadIO m) =>
      Int -- ^ Row index/counter
-  -> row -- ^ Row data
+  -> Value -- ^ Row data as JSON
   -> header -- ^ Row header
-  -> (row -> header -> m Value) -- ^ Coverter function taking the row and header returning a JSON 'Value'
+  -> (JSValue -> header -> m Value) -- ^ Coverter function taking the row and header returning a JSON 'Value'
   -> (Value -> [ValidatorFailure]) -- ^ Validator function, used to check that the output of the converter function
                                    -- conforms to the JSON schema, specified in 'jsonSchema'
   -> DataOutput -- ^ Either a Database connection or a file handle, 
                 -- depending on where we output data
-  -> ErrorHandling
-  -> Value -- ^ Row data as JSON
+  -> ErrorOutput
+  -> TerminateOnError
   -> m (HM.HashMap Value (S.HashSet Value)) -- ^ returns a map from JSON 'Value's to a set of 'Value's, 
                                                     -- by calling 'createAllPathsWithValues' on the converter function output
-convertRow i row header rowFun validator outputHandle onError rowJSON = 
-  try (rowFun row header) >>= \case
+convertRow i rowJSON header rowFun validator outputHandle onError terminateOnError = 
+  try ((withJSValue rowJSON $ \row -> rowFun row header) `catch` \(e::SomeJSRuntimeException) -> throwM $ JSRuntimeError (show e)) >>= \case
     -- Below, we catch in two stages, to get better errors. Notice the second catch in 
     -- the Right branch has the additional parameter res, which is added to the error
     -- output for easier debugging.
-    Left (e::SomeRuntimeException) -> handleError onError i e rowJSON "" >> return HM.empty
+    Left (e::SomeRuntimeException) -> handleError terminateOnError onError i e rowJSON "" >> return HM.empty
     Right (Array resMultiple) -> 
       -- if rowFun returns an array of records, we process each one and merge the resulting
       -- jsonAttrVals from each run.
@@ -148,11 +149,14 @@ convertRow i row header rowFun validator outputHandle onError rowJSON =
           when (i > 0 || j > 0) $ BSL.hPutStr outputFileHandle " , "
           BSL.hPutStr outputFileHandle $ encodePretty res
           return HM.empty ;
+        ConsoleOutput -> do
+          putStrLn $ toS $ encodePretty res
+          return HM.empty ;
         SQLFileOutput sourceID outputFileHandle -> do
           (_,eav) <- flattenToEAV res
           forM_ eav $ \(uuid,attr,val) -> BSL.hPutStr outputFileHandle $ toS $ (fromQuery $ MySQL.insertEAVPrepareQuery uuid sourceID (FileID 0) subjectID attr val) <> ";\n"
           return HM.empty ;
-    } `catch` \(e::SomeRuntimeException) -> handleError onError i e rowJSON res >> return HM.empty
+    } `catch` \(e::SomeRuntimeException) -> handleError terminateOnError onError i e rowJSON res >> return HM.empty
 
 {-|
 Helper function which loops over the rows of the given input, 
@@ -173,17 +177,18 @@ processTxtFile :: (MonadMask m, MonadIO m, MonadReader JSContextPtr m) =>
   -> (Value -> [ValidatorFailure])
   -> FilePath
   -> DataOutput
-  -> ErrorHandling
+  -> ErrorOutput
+  -> TerminateOnError 
   -> Int
   -> m (HM.HashMap Value (S.HashSet Value))
-processTxtFile rowFun validator fName outputHandle onError startFromLine = do
+processTxtFile rowFun validator fName outputHandle onError terminateOnError startFromLine = do
   file <- liftIO $ openFile fName ReadMode
   txt <- liftIO $ Text.hGetContents file
   withJSValue ([("h", "data")] :: [(Text.Text, Text.Text)]) $ \header ->
     processRow (Text.lines txt) $ \i l ->
       if (i < startFromLine) then return HM.empty
-      else let rowJSON = Object $ HM.fromList [("i" , toJSON i), ("data" , toJSON l)] in withJSValue rowJSON $ \row ->
-        convertRow i row header rowFun validator outputHandle onError rowJSON
+      else let rowJSON = Object $ HM.fromList [("i" , toJSON i), ("data" , toJSON l)] in 
+        convertRow i rowJSON header rowFun validator outputHandle onError terminateOnError
   
 
 
@@ -192,17 +197,17 @@ processXlsxFile :: (MonadMask m, MonadIO m, MonadReader JSContextPtr m) =>
   -> (Value -> [ValidatorFailure])
   -> FilePath
   -> DataOutput
-  -> ErrorHandling
+  -> ErrorOutput
+  -> TerminateOnError 
   -> Maybe SheetName
   -> m (HM.HashMap Value (S.HashSet Value))
-processXlsxFile rowFun validator fName outputHandle onError sheetName = do
+processXlsxFile rowFun validator fName outputHandle onError terminateOnError sheetName = do
   headerRowsMaybe <- readXlsxFile fName (fmap unSheetName sheetName)
   case headerRowsMaybe of
     Just (h, rows) ->
       withJSValue (toJSON h) $ \header ->
-        processRow rows $ \i r -> 
-          withJSValue r $ \row ->
-            convertRow i row header rowFun validator outputHandle onError r
+        processRow rows $ \i rowJSON -> 
+          convertRow i rowJSON header rowFun validator outputHandle onError terminateOnError
     Nothing -> case sheetName of
       Just (SheetName s) -> throwM $ SheetNotFound s
       Nothing -> throwM $ RuntimeError $ "No sheets found in file."
@@ -214,14 +219,15 @@ processCsvFile :: (MonadMask m, MonadIO m, MonadReader JSContextPtr m) =>
   -> (Value -> [ValidatorFailure])
   -> FilePath
   -> DataOutput
-  -> ErrorHandling
+  -> ErrorOutput
+  -> TerminateOnError 
   -> m (HM.HashMap Value (S.HashSet Value))
-processCsvFile rowFun validator fName outputHandle onError = do
+processCsvFile rowFun validator fName outputHandle onError terminateOnError = do
   (h, rows) <- readCsvFile fName
   withJSValue h $ \header ->
     processRow rows $ \i r ->
-      let rowJSON = Object $ HM.insert "i" (toJSON i) r in withJSValue rowJSON $ \row ->
-        convertRow i row header rowFun validator outputHandle onError rowJSON
+      let rowJSON = Object $ HM.insert "i" (toJSON i) r in 
+        convertRow i rowJSON header rowFun validator outputHandle onError terminateOnError
 
 
 processJsonFile :: (MonadMask m, MonadIO m, MonadReader JSContextPtr m) =>
@@ -229,9 +235,10 @@ processJsonFile :: (MonadMask m, MonadIO m, MonadReader JSContextPtr m) =>
   -> (Value -> [ValidatorFailure])
   -> FilePath
   -> DataOutput
-  -> ErrorHandling
+  -> ErrorOutput
+  -> TerminateOnError 
   -> m (HM.HashMap Value (S.HashSet Value))
-processJsonFile rowFun validator fName outputHandle onError = do 
+processJsonFile rowFun validator fName outputHandle onError terminateOnError = do 
   f <- liftIO $ BSL.readFile fName;
   let 
     (rows, hs) = case decode f of
@@ -241,8 +248,7 @@ processJsonFile rowFun validator fName outputHandle onError = do
   
   withJSValue (Object $ HM.fromList $ map (\h -> ("h", toJSON h)) hs) $ \header ->
     processRow rows $ \i r -> do
-      let rowJSON = insertI i r in withJSValue rowJSON $ \row ->
-        convertRow i row header rowFun validator outputHandle onError rowJSON
+      let rowJSON = insertI i r in convertRow i rowJSON header rowFun validator outputHandle onError terminateOnError
    
   where
     getHeader (Object o) = HM.keys o
@@ -264,8 +270,9 @@ processFile :: (MonadMask m, MonadIO m, MonadReader JSContextPtr m) =>
                                            -- Optional sheet name only used when 'FileType' is 'XLSXFile'.
   -> DataOutputOpt
   -> ErrorOpt -- ^ Describes the error behaviour when parsing a row of the input. 
+  -> TerminateOnError 
   -> m ()
-processFile rowFun validator fName fType outOpt onError = 
+processFile rowFun validator fName fType outOpt onError terminateOnError = 
   case outOpt of
     -- if we have db conn info, we will be writing into the db instead of a file
     DBOutputOpt (SomeDBType (db_type :: DBType ty), user, pass, host, port, db) sourceID ->
@@ -292,8 +299,7 @@ processFile rowFun validator fName fType outOpt onError =
                 liftIO $ clearErrors sourceID fileID con
                 return fileID
               Nothing -> throwM $ FileIDNotFound fName
-
-          jsonAttrVals <- process DBOutput{..} (Just $ fromMaybe DBOutput{..} (JSONFileOutput <$> logFileHandle))
+          jsonAttrVals <- process DBOutput{..} (ErrorOutput $ if onError == LogToConsole then ConsoleOutput else fromMaybe DBOutput{..} (JSONFileOutput <$> logFileHandle))
           liftIO $ case db_type of 
             Postgres -> do
               forM_ (HM.toList jsonAttrVals) $ \(attr,vs) ->
@@ -306,7 +312,7 @@ processFile rowFun validator fName fType outOpt onError =
         -- open an output file and write an opening bracket '['
         (liftIO $ do
           outHandle <- writeFile (fName <.> "out.json") "[\n" >> openFile (fName <.> "out.json") AppendMode
-          logHandle <- if onError == Log || onError == LogToFile 
+          logHandle <- if onError == LogToFile 
             then writeFile (fName <.> "log") "" >> Just <$> openFile (fName <.> "log") AppendMode 
             else return Nothing
           return (outHandle, logHandle)
@@ -318,14 +324,14 @@ processFile rowFun validator fName fType outOpt onError =
         ) $
         -- main body
         \(outputFileHandle, logFileHandle) ->
-          process (JSONFileOutput outputFileHandle) (JSONFileOutput <$> logFileHandle) >>
+          process (JSONFileOutput outputFileHandle) (ErrorOutput $ fromMaybe ConsoleOutput $ JSONFileOutput <$> logFileHandle) >>
           return ()
     SQLFileOutputOpt sourceID -> 
       bracket
         -- open an output file 
         (liftIO $ do
           outHandle <- writeFile (fName <.> "out.sql") "" >> openFile (fName <.> "out.sql") AppendMode
-          logHandle <- if onError == Log || onError == LogToFile 
+          logHandle <- if onError == LogToFile 
             then writeFile (fName <.> "log") "" >> Just <$> openFile (fName <.> "log") AppendMode 
             else return Nothing
           return (outHandle, logHandle)
@@ -337,11 +343,11 @@ processFile rowFun validator fName fType outOpt onError =
         ) $
         -- main body
         \(outputFileHandle, logFileHandle) ->
-          process (SQLFileOutput sourceID outputFileHandle) (JSONFileOutput <$> logFileHandle) >>
+          process (SQLFileOutput sourceID outputFileHandle) (ErrorOutput $ fromMaybe ConsoleOutput $ JSONFileOutput <$> logFileHandle) >>
           return ()
   where
-    process outputHandle maybeLogHandle = case fType of
-      TXTFile startFromLine -> processTxtFile  rowFun validator fName outputHandle (ErrorHandling (onError, maybeLogHandle)) startFromLine 
-      XLSXFile sheetName    -> processXlsxFile rowFun validator fName outputHandle (ErrorHandling (onError, maybeLogHandle)) sheetName
-      CSVFile               -> processCsvFile  rowFun validator fName outputHandle (ErrorHandling (onError, maybeLogHandle))
-      JSONFile              -> processJsonFile rowFun validator fName outputHandle (ErrorHandling (onError, maybeLogHandle))
+    process outputHandle errorHandling = case fType of
+      TXTFile startFromLine -> processTxtFile  rowFun validator fName outputHandle errorHandling terminateOnError startFromLine 
+      XLSXFile sheetName    -> processXlsxFile rowFun validator fName outputHandle errorHandling terminateOnError sheetName
+      CSVFile               -> processCsvFile  rowFun validator fName outputHandle errorHandling terminateOnError
+      JSONFile              -> processJsonFile rowFun validator fName outputHandle errorHandling terminateOnError

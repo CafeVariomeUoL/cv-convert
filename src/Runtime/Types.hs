@@ -1,7 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, ExistentialQuantification #-}
 
 module Runtime.Types where
-import           Data.Aeson               (withText, Value(..), FromJSON(..), (.:), (.:?))
+import           Data.Aeson               (Value(..), FromJSON(..), (.:), (.:?))
 import           Data.Aeson.Types         (Parser, unexpected)
 import           Data.Text                (Text)
 import           Data.String.Conv         (toS)
@@ -12,7 +12,7 @@ import qualified Data.ByteString          as BS
 import           JSONSchema.Draft4.Schema (Schema)
 import           System.IO                (Handle)
 
-import           DB
+import DB ( FileID, SourceID, ConnInfo, DBConn )
 
 
 {-|
@@ -68,16 +68,16 @@ Data type used to describe the error reporting/handling behaviour when processin
 Other than 'Terminate, all other options result in the error from a row being recorded/printed,
 with the computation continuing onto the next row.
 -}
-data ErrorOpt = Terminate | LogToConsole | LogToFile | Log deriving (Show, Eq, Generic)
+data ErrorOpt = LogToConsole | LogToFile | LogToDB deriving (Show, Eq, Generic)
 
 
-instance FromJSON ErrorOpt where 
-  parseJSON = withText "ErrorOpt" $ \case 
-    s | s == "terminate"  -> return Terminate
-    s | s == "log_to_console" -> return LogToConsole
-    s | s == "log_to_file" -> return LogToFile
-    s | s == "log"  -> return $ Log
-    s | otherwise   -> unexpected $ String s
+-- instance FromJSON ErrorOpt where 
+--   parseJSON = withText "ErrorOpt" $ \case 
+--     s | s == "terminate"  -> return Terminate
+--     s | s == "log_to_console" -> return LogToConsole
+--     s | s == "log_to_file" -> return LogToFile
+--     s | s == "log"  -> return $ Log
+--     s | otherwise   -> unexpected $ String s
 
 
 
@@ -112,7 +112,7 @@ data Settings = Settings {
                            -- If left blank, parsing defaults to either file extension 
                            -- (if it corresponds to one of the 'FileType's), otherwise 'TXTFile'.
 -- , startFrom :: Maybe Int -- ^ This parameter specifies how many rows should be skipped. Only works when parsing TXTFile files
-, onError :: Maybe ErrorOpt -- ^ Specifies the error logging behaviour
+-- , onError :: Maybe ErrorOpt -- ^ Specifies the error logging behaviour
 -- , worksheet :: Maybe SheetName -- ^ Used to specify which worksheet should be parsed.
                                -- Only works for 'XLSXFile' files. If left blank, defaults to first found worksheet.
 } deriving (Show, Eq, Generic)
@@ -123,7 +123,7 @@ instance FromJSON Settings where
       <*> v .:? "libraryFunctions"
       <*> v .:? "jsonSchema"
       <*> (join $ parseFileType <$> v .:? "startFrom" <*> v .:? "worksheet" <*> v .:? "openAs")
-      <*> v .:? "onError"
+      -- <*> v .:? "onError"
   parseJSON o = unexpected o
 
 {-|
@@ -143,5 +143,9 @@ data DataOutput = JSONFileOutput Handle -- ^ `Handle` points to an open JSON fil
                   , fileID :: FileID
                   }
                 | SQLFileOutput SourceID Handle -- ^ `Handle` points to an open SQL file
+                | ConsoleOutput
 
-newtype ErrorHandling = ErrorHandling (ErrorOpt, Maybe DataOutput)
+newtype ErrorOutput = ErrorOutput DataOutput
+
+
+newtype TerminateOnError = TerminateOnError Bool

@@ -10,13 +10,16 @@ The tool has a command line interface with the following basic usage:
 
 ```
 cv-convert (-i|--input STRING) (-s|--settings STRING) 
-           [-o|--output STRING] [-e|--env STRING] [-s|--source-id INT]
-           [-d|--db-config STRING]
+           [-o|--output STRING] [-e|--env STRING] [-s|--source-id INT] 
+           [-d|--db-config STRING] [--log STRING] 
+           [-t|--terminate-on-error] [-v|--verbose]
 ```
 
 The required arguments are `-i` for passing in the path to the input file and `-s` for passing in the path to
 the `.settings` file, used to convert the file. When no other flags are passed as arguments, the output is written
-into a JSON file at `<path_to_input_file>.out.json`
+into a JSON file at `<path_to_input_file>.out.json` and log outputs go to `<path_to_input_file>.log`.
+
+For different logging behaviour, set the `--log` flag to one of `console`, `file` or `db`. The default behaviour of the program is to skip any line where an error occurs and carry on with the rest of the file. If this is not the desired behaviour, pass the `--terminate-on-error` flag to the CLI.
 
 The flag `-o` takes the values:
 
@@ -28,7 +31,7 @@ The flag `-o` takes the values:
     ```
     (See the section `DB` below for more info)
 - `db` - directing output into a dababase. Note: This flag must be used together with either:
-    *   the `-e` flag, used to specify the path to an ENV file, which must contain the `host`, `dbname`, `user`, `password` and `db`, which can have value `mysql` or `postgres` variables, or
+    *   the `-e` flag, used to specify the path to an ENV file, which must contain the `host`, `dbname`, `user`, `password` and `db` (with value `mysql` or `postgres`), or
     *   the `--db-config` flag, passing in a DB connection URI in the form `db_type://user:password@host:port/dbname`
     
     These parameters are used to establish a connection to the DB. When writing to a `postgres` backend, the output is stored as

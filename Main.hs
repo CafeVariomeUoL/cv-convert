@@ -45,11 +45,13 @@ data Options w = Options
   deriving (Generic)
 
 nameMod :: String -> Maybe Char
-nameMod "source-id" = Nothing
-nameMod "db-config" = Nothing
-nameMod "log" = Nothing
-nameMod "terminate-on-error" = Nothing
-nameMod s = firstLetter s
+nameMod s
+  | s == "sourceId" = Nothing
+  | s == "dbConfig" = Nothing
+  | s == "log" = Nothing
+  | s == "terminateOnError" = Nothing
+  | s == "env" = Nothing
+  | otherwise = firstLetter s
 
 instance ParseRecord (Options Wrapped) where
   parseRecord = parseRecordWithModifiers lispCaseModifiers{ 

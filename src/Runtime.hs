@@ -21,7 +21,7 @@ import           Data.Aeson.Encode.Pretty      (encodePretty)
 import qualified Data.ByteString.Lazy          as BSL
 import qualified Data.ByteString               as BS
 import qualified Data.ByteString.Builder       as BS
-
+import           Data.Maybe                    (fromMaybe)
 import qualified Data.Text                     as Text
 import qualified Data.Text.IO                  as Text
 import           Control.Monad.IO.Class        (MonadIO, liftIO)
@@ -29,8 +29,6 @@ import           Control.Monad                 (when, forM_, unless)
 import qualified Data.HashMap.Strict           as HM
 import           Control.Monad.Catch           (MonadThrow(..), MonadMask(..), try, catch, bracket)
 import           Control.Monad.Reader          (MonadReader)
-import           Control.Lens                  ((^.))
-import           Control.Lens.Combinators      (FoldableWithIndex, ifoldlM)
 import           System.FilePath.Posix         (takeFileName, (<.>))
 import           Data.String.Conv              (toS)
 import           System.Directory              (doesFileExist)
@@ -38,9 +36,10 @@ import qualified Data.HashSet                  as S
 import qualified Data.Vector                   as V
 import           Database.MySQL.Base           as MySQL
 import           Crypto.Hash.SHA256            (hashlazy)
-import           Network.Wreq                  (get, responseBody)
-
+import           Network.HTTP                  (simpleHTTP, mkRequest, RequestMethod(GET), getResponseBody)
+import           Network.URI                   (parseURI)
 import           Runtime.Types
+import           Runtime.Utils
 import           Runtime.Error
 import           Quickjs                      (JSValue, JSContextPtr, eval_, withJSValue)
 import           Quickjs.Error                (SomeJSRuntimeException)
@@ -51,7 +50,6 @@ import           DB
 import qualified DB.Postgres                  as Postgres
 import qualified DB.MySQL                     as MySQL
 import           JSON.Utils                   (createAllPathsWithValues, flattenToEAV, getSubjectID)
-import Data.Maybe (fromMaybe)
 
 
 
@@ -68,20 +66,22 @@ loadLibrary (Inline script) = eval_ ("Lib = {};\n" <> script) >> return ()
 loadLibrary External{..} = do
   let libPath = (toS hash) <.> "js"
   lib <- liftIO $ doesFileExist libPath >>= \case
-    True -> liftIO $ withUtf8 $ BS.readFile libPath
-    False -> do
-      r <- liftIO $ get $ toS url
+    True -> withUtf8 $ BS.readFile libPath
+    False ->
       -- get the contents (as a lazy ByteString)
-      let contents = r ^. responseBody
-          contents_hash = toS $ BS.toLazyByteString $ BS.byteStringHex $ hashlazy contents
+      case parseURI $ toS url of
+        Nothing -> error $ "Not a valid URL " ++ (color blue $ "'" ++ toS url ++ "'") ++ "."
+        Just u  -> do
+          contents <- simpleHTTP (mkRequest GET u) >>= getResponseBody
+          let contents_hash = toS $ BS.toLazyByteString $ BS.byteStringHex $ hashlazy contents
 
-      unless (contents_hash == hash) $ throwM $ HashMismatch {
-          url = url
-        , expected_hash = toS hash
-        , found_hash = toS contents_hash
-        }
-      liftIO $ BSL.writeFile libPath contents
-      return $ toS contents
+          unless (contents_hash == hash) $ throwM $ HashMismatch {
+              url = url
+            , expected_hash = toS hash
+            , found_hash = toS contents_hash
+            }
+          BSL.writeFile libPath contents
+          return $ toS contents
 
   _ <- eval_ $ "Lib = {};\n" <> lib
   return ()
@@ -125,7 +125,7 @@ convertRow i rowJSON header rowFun validator outputHandle onError terminateOnErr
     Right (Array resMultiple) -> 
       -- if rowFun returns an array of records, we process each one and merge the resulting
       -- jsonAttrVals from each run.
-      ifoldlM (\j jsonAttrValsAcc res -> 
+      ifoldM (\j jsonAttrValsAcc res -> 
         do
           jsonAttrVals <- process j res
           return $ HM.unionWith (S.union) jsonAttrVals jsonAttrValsAcc
@@ -162,11 +162,11 @@ convertRow i rowJSON header rowFun validator outputHandle onError terminateOnErr
 Helper function which loops over the rows of the given input, 
 collecting and merging all the resulting maps (generated inside 'convertRow' via 'createAllPathsWithValues') 
 -}
-processRow :: (FoldableWithIndex Int f, MonadThrow m) => 
+processRow :: (FoldableWithIndex f, MonadThrow m) => 
        f row -- ^ Any list like data structure containing rows we can loop over with an index
     -> (Int -> row -> m (HM.HashMap Value (S.HashSet Value))) -- ^ Function that consumes the row together with it's index
     -> m (HM.HashMap Value (S.HashSet Value))
-processRow input m = ifoldlM (\i jsonAttrValsAcc l -> do
+processRow input m = ifoldM (\i jsonAttrValsAcc l -> do
     jsonAttrVals <- m i l
     return $ HM.unionWith (S.union) jsonAttrVals jsonAttrValsAcc
   ) HM.empty input

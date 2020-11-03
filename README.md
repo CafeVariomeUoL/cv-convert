@@ -10,9 +10,9 @@ The tool has a command line interface with the following basic usage:
 
 ```
 cv-convert (-i|--input STRING) (-s|--settings STRING) 
-           [-o|--output STRING] [-e|--env STRING] [-s|--source-id INT] 
-           [-d|--db-config STRING] [--log STRING] 
-           [-t|--terminate-on-error] [-v|--verbose]
+           [-o|--output STRING] [--env STRING] [--source-id INT] 
+           [--db-config STRING] [--log STRING] [--terminate-on-error] 
+           [-v|--verbose]
 ```
 
 The required arguments are `-i` for passing in the path to the input file and `-s` for passing in the path to
@@ -31,7 +31,7 @@ The flag `-o` takes the values:
     ```
     (See the section `DB` below for more info)
 - `db` - directing output into a dababase. Note: This flag must be used together with either:
-    *   the `-e` flag, used to specify the path to an ENV file, which must contain the `host`, `dbname`, `user`, `password` and `db` (with value `mysql` or `postgres`), or
+    *   the `--env` flag, used to specify the path to an ENV file, which must contain the `host`, `dbname`, `user`, `password` and `db` (with value `mysql` or `postgres`), or
     *   the `--db-config` flag, passing in a DB connection URI in the form `db_type://user:password@host:port/dbname`
     
     These parameters are used to establish a connection to the DB. When writing to a `postgres` backend, the output is stored as
@@ -77,7 +77,7 @@ The flag `-o` takes the values:
     CREATE TABLE eavs (
         id serial primary key,
         uid character varying(50) NOT NULL,
-        source_id character varying(50) NOT NULL,
+        source_id integer NOT NULL,
         "fileName" integer NOT NULL,
         subject_id text NOT NULL,
         type character varying(20) NOT NULL,
@@ -90,7 +90,7 @@ The flag `-o` takes the values:
 ---
 **NOTE**
 
-When using the `-o MySQL` or `-o DB` options, the `source_id` argument must also be provided via `-s <source_id>`, as it is needed when inserting into the tables above.
+When using the `-o sql` or `-o db` options, the `source_id` argument must also be provided via `--source-id <source_id>`, as it is needed when inserting into the tables above.
 
 ---
 

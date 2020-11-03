@@ -3,7 +3,8 @@
 module Parse.Xlsx (readXlsxFile) where
 
 import           Codec.Xlsx
-import           Control.Lens
+import           Lens.Micro
+import           Lens.Micro.Mtl
 import           Control.Monad.IO.Class     (liftIO)
 import           Control.Monad.State        (evalState, put)
 import qualified Data.Aeson                 as JSON
@@ -51,7 +52,9 @@ rowToJSON fields i_k i row = (i_k , JSON.Number $ fromIntegral i) : (M.elems $ M
 
 readFieldNames :: Row k Cell -> Row k Text
 readFieldNames cellsX =
-  M.mapMaybe (^? cellValue . _Just . _CellText) cellsX
+  M.mapMaybe (\(c :: Cell) -> case c ^? cellValue . _Just of
+    Just (CellText t) -> Just t
+    _ -> Nothing) cellsX
 
 extractRow :: (Ord k2, Eq a1) => a1 -> Sheet a1 k2 a -> Row k2 a
 extractRow selectedRow =
@@ -88,10 +91,3 @@ cellValueToValue (CellDouble d) = JSON.Number (fromRational . toRational $ d)
 cellValueToValue (CellBool b) = JSON.Bool b
 cellValueToValue (CellRich b) = JSON.String (b ^. traverse . richTextRunText)
 cellValueToValue (CellError _) = JSON.Null
-
--- | Supporting Things
-
-_CellText :: Prism' CellValue T.Text
-_CellText = prism' CellText g
- where g (CellText t) = Just t
-       g _ = Nothing

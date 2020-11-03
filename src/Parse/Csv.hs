@@ -9,13 +9,8 @@ import           Data.Csv.Parser            (defaultDecodeOptions, decDelimiter)
 import qualified Data.HashMap.Strict        as HM
 import           Control.Monad.Catch        (MonadThrow(..))
 import           Control.Monad.IO.Class     (MonadIO, liftIO)
-import           Control.Lens.Combinators   (FoldableWithIndex, TraversableWithIndex, FunctorWithIndex)
 import           Parse.Utils
 import           Runtime.Error
-
-instance FoldableWithIndex Int Records
-instance TraversableWithIndex Int Records
-instance FunctorWithIndex Int Records
 
 -- Some UTF-8 encoded files start with the BOM mark, see:
 -- https://en.wikipedia.org/wiki/Byte_order_mark

@@ -23,8 +23,8 @@ insertEAV uuID srcID fID subID attr val con = execute_ con (insertEAVPrepareQuer
 
 insertEAVPrepareQuery :: UUID -> SourceID -> FileID -> SubjectID -> Text -> Text -> Query
 insertEAVPrepareQuery uuID (SourceID srcID) (FileID fID) (SubjectID subID) attr val = renderParams
-  "INSERT INTO eavs(uid, source, fileName, subject_id, type, attribute, value, elastic) VALUES (?, ?, ?, ?, 'attribute', ?, ?, 0)"
-  [MySQLText $ toText uuID, MySQLText $ pack $ show srcID, MySQLInt64 $ fromInteger $ toInteger fID, MySQLText $ pack $ subID, MySQLText attr, MySQLText val]
+  "INSERT INTO eavs(uid, source_id, fileName, subject_id, type, attribute, value, elastic) VALUES (?, ?, ?, ?, 'attribute', ?, ?, 0)"
+  [MySQLText $ toText uuID, MySQLInt32 $ fromInteger $ toInteger srcID, MySQLInt64 $ fromInteger $ toInteger fID, MySQLText $ pack $ subID, MySQLText attr, MySQLText val]
 
 insertError :: SourceID -> FileID -> String -> MySQLConn -> IO ()
 insertError (SourceID srcID) (FileID fID) msg con = execute con

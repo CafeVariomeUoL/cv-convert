@@ -56,7 +56,7 @@ CREATE TABLE sources (
 CREATE TABLE eavs (
     id serial primary key,
     uid character varying(50) NOT NULL,
-    source_id character varying(50) NOT NULL,
+    source_id integer NOT NULL,
     "fileName" integer NOT NULL,
     subject_id text NOT NULL,
     type character varying(20) NOT NULL,
@@ -118,14 +118,14 @@ CREATE TABLE `sources` (
 
 CREATE TABLE `eavs` (
   `id` int(15) NOT NULL,
-  `uid` varchar(50) NOT NULL,
-  `source` varchar(50) NOT NULL,
+  `uid` char(36) NOT NULL,
+  `source_id` int(11) NOT NULL,
   `fileName` mediumint(8) UNSIGNED NOT NULL,
   `subject_id` varchar(20) NOT NULL,
   `type` varchar(20) NOT NULL,
   `attribute` varchar(50) NOT NULL,
   `value` varchar(200) DEFAULT NULL,
-  `elastic` tinyint(1) NOT NULL DEFAULT '0'
+  `elastic` bit(1) NOT NULL DEFAULT b'0'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 

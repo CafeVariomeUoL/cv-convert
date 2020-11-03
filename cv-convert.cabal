@@ -77,8 +77,10 @@ library
     , string-interpolate
     , shorten-strings
     , split
-    , xlsx
-    , lens
+    , xlsx >= 0.8.2
+    -- used in Parse/Xlsx.hs
+    , microlens
+    , microlens-mtl
     , bytestring
     , cassava
     , yeshql-core
@@ -89,12 +91,12 @@ library
     , uuid
     , filepath
     , directory
-    , hjsonpointer
+    , hjsonpointer >= 1.5.0
     , hashable
     , with-utf8
     , time
     , cryptohash-sha256
-    , wreq
+    , HTTP
     , quickjs-hs
     , mysql-haskell
     , io-streams

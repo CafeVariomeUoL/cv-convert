@@ -81,19 +81,6 @@ INSERT INTO eavs_jsonb(source_id, "fileName", subject_id, data)
 |]
 
 
-[yesh1|
--- name:insertEAV_ :: ()
--- :uuid :: UUID
--- :sourceID :: String
--- :fileID :: FileID
--- :subjectID :: SubjectID
--- :attr :: Text
--- :value :: Text
-INSERT INTO eavs(uid, source_id, "fileName", subject_id, type, attribute, value, elastic)
-	VALUES (:uuid, :sourceID, :fileID, :subjectID, 'attribute', :attr, :value, false);
-|]
-
-
 {-|
 Stores a row in the EAV triples format. 
 
@@ -145,12 +132,17 @@ These are then inserted into the @eavs@ table:
 +--------------------------------------+-----------+----------+------------+-------------+--------------------------------------+
 
 -}
-insertEAV :: IConnection conn =>
-  UUID -> SourceID -> FileID -> SubjectID -> Text -> Text -> conn -> IO ()
-insertEAV uuid (SourceID sID) fileID subjectID attr value = insertEAV_ uuid (show sID) fileID subjectID attr value
-
-
-
+[yesh1|
+-- name:insertEAV :: ()
+-- :uuid :: UUID
+-- :sourceID :: SourceID
+-- :fileID :: FileID
+-- :subjectID :: SubjectID
+-- :attr :: Text
+-- :value :: Text
+INSERT INTO eavs(uid, source_id, "fileName", subject_id, type, attribute, value, elastic)
+	VALUES (:uuid, :sourceID, :fileID, :subjectID, 'attribute', :attr, :value, false);
+|]
 
 
 {-|

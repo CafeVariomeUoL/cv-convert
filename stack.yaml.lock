@@ -5,19 +5,12 @@
 
 packages:
 - completed:
-    hackage: hjsonschema-1.10.0@sha256:d8143c0fa792276ed5743b619447c5b7c3e7dbd73b356e74259232574b6cc394,5249
-    pantry-tree:
-      size: 5875
-      sha256: 068d894a2cec71f9228367e341fde05dd99ba52da7cdc55f735a089928fab90f
-  original:
-    hackage: hjsonschema-1.10.0@sha256:d8143c0fa792276ed5743b619447c5b7c3e7dbd73b356e74259232574b6cc394,5249
-- completed:
-    hackage: hjsonpointer-1.3.0@sha256:26eea6a7c0414939cb239f653d293ff1a1f76b569e3dca6e0ecf950b54c5fb50,1591
+    hackage: hjsonpointer-1.5.0@sha256:a015fff349399e8526594788e1caf7cda715b23d7c5aa49ba6eec98916862ef9,1260
     pantry-tree:
       size: 428
-      sha256: 673b7ed33346636c1bdc00c5224da67f9fc33f5cc29f2c15608d9acd7c34b35c
+      sha256: 3fc1e17a45ebef90b78f783a46c20f2b712e6f93ce77f4914a8dabdf8daa7fa1
   original:
-    hackage: hjsonpointer-1.3.0@sha256:26eea6a7c0414939cb239f653d293ff1a1f76b569e3dca6e0ecf950b54c5fb50,1591
+    hackage: hjsonpointer-1.5.0
 - completed:
     hackage: shorten-strings-0.1.0.1@sha256:77be3e24e5880e764ef37d0b901ebfacbeb2c958dae293dcb78e0e0f96ea8376,760
     pantry-tree:
@@ -119,14 +112,14 @@ packages:
 - completed:
     name: mysql-haskell
     version: 0.8.4.2
-    git: https://github.com/jchia/mysql-haskell.git
+    git: https://github.com/winterland1989/mysql-haskell.git
     pantry-tree:
       size: 3863
       sha256: 247db6b56fbd9fa95937bd07828931a6d92af224c227a1a82fd2c0456e4347ba
-    commit: b01d9f518e3614c9ee5580e64d61400ed8ab5b39
+    commit: 223517f87a96030edacfe0e2e74979e47aa54f32
   original:
-    git: https://github.com/jchia/mysql-haskell.git
-    commit: b01d9f518e3614c9ee5580e64d61400ed8ab5b39
+    git: https://github.com/winterland1989/mysql-haskell.git
+    commit: 223517f87a96030edacfe0e2e74979e47aa54f32
 - completed:
     hackage: tcp-streams-1.0.1.1@sha256:35e9ecfa515797052f8c3c01834d2daebd5e93f3152c7fc98b32652bf6f0c052,2329
     pantry-tree:
@@ -148,6 +141,24 @@ packages:
       sha256: be3f75718192107296da5c384dce441600603ffc381aba45bdcbed33ff48a61e
   original:
     hackage: quickjs-hs-0.1.2.3
+- completed:
+    name: hjsonschema
+    version: 1.10.0
+    git: https://github.com/goodlyrottenapple/hjsonschema.git
+    pantry-tree:
+      size: 12852
+      sha256: 215cd1a4090fa34547e2796ede1c122212e33afee1d114aed3597bedad9b03d0
+    commit: 8e0aeb4ce2ac56fd045a6fa5667651974b4f3186
+  original:
+    git: https://github.com/goodlyrottenapple/hjsonschema.git
+    commit: 8e0aeb4ce2ac56fd045a6fa5667651974b4f3186
+- completed:
+    hackage: xlsx-0.8.2@sha256:8e986745b7fd6b630682578546f52e5e8cc4f37c75fdb88c04afdf0054882019,5858
+    pantry-tree:
+      size: 3800
+      sha256: 04d757658f30e20188b296e780511e8ccb8ebdd5656e88e291c3f9506e706501
+  original:
+    hackage: xlsx-0.8.2
 snapshots:
 - completed:
     size: 496111

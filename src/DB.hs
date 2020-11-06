@@ -3,6 +3,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE GADTs, PolyKinds #-}
 {-# LANGUAGE DataKinds, KindSignatures, FunctionalDependencies #-}
+
 module DB(DBType(..), SomeDBType(..), SomeDBException(..),
   SourceID(..), SubjectID(..), FileID(..), User(..), Password(..), Host(..), Port(..), Database(..), ConnInfo,
   DBConn(..), getFileID, insertEAV, insertError, clearErrors,mkConnInfo) where
@@ -15,23 +16,21 @@ import qualified Database.HDBC.PostgreSQL.Pure as Postgres
 import qualified Database.MySQL.Base           as MySQL
 import           Database.HDBC.Types           (IConnection(commit, disconnect))
 import           Data.Default.Class            (def)
-
 import           Data.Text                     (Text)
 import           Data.UUID                     (UUID)
-
 import           DB.Types
 import           DB.Utils
 import qualified DB.Postgres                   as Postgres
 import qualified DB.MySQL                      as MySQL
-import Data.Maybe (fromMaybe)
-import Data.String.Conv (toS)
-import Control.Exception (catch, IOException, Exception)
-import Control.Monad.Catch (MonadThrow(throwM))
+import           Data.Maybe                    (fromMaybe)
+import           Data.String.Conv              (toS)
+import           Control.Exception             (catch, IOException, Exception)
+import           Control.Monad.Catch           (MonadThrow(throwM))
 
 
 data DBType :: Type -> Type where
-    Postgres :: DBType Connection
-    MySQL :: DBType MySQLConn
+  Postgres :: DBType Connection
+  MySQL :: DBType MySQLConn
 
 
 class DBConn con_ty where

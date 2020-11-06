@@ -7,7 +7,8 @@ import qualified Data.HashMap.Strict        as HM
 import           Data.List                  (mapAccumL)
 import           Data.String.Conv           (StringConv, toS)
 
--- | we have to make sure that non-unique columns are distinguished. we do this by appending a number to every occurence of the same column name
+-- | This function ensures that non-unique columns are distinguished. 
+-- | We do this by appending a number to every occurence of the same column name
 uniqueHeader :: (Traversable t, Ord a, Semigroup a, StringConv String a) => t a -> t a
 uniqueHeader = snd . mapAccumL f M.empty 
   where 

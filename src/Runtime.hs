@@ -14,42 +14,43 @@ The runtime module exports the main functionality of the cv-convert tool.
 -}
 module Runtime(SourceID, DataOutputOpt(..), ErrorOpt(..), TerminateOnError(..), FileType(..), SheetName, LibFunctions(..), Settings(..), loadLibrary, fromSpecifiedFileType, processFile, compileSchema) where
 
-import           Main.Utf8                     (withUtf8)
-import           System.IO                     (openFile, IOMode(..), hClose)
-import           Data.Aeson                    (Value(..), decode, toJSON)
-import           Data.Aeson.Encode.Pretty      (encodePretty)
-import qualified Data.ByteString.Lazy          as BSL
-import qualified Data.ByteString               as BS
-import qualified Data.ByteString.Builder       as BS
-import           Data.Maybe                    (fromMaybe)
-import qualified Data.Text                     as Text
-import qualified Data.Text.IO                  as Text
-import           Control.Monad.IO.Class        (MonadIO, liftIO)
-import           Control.Monad                 (when, forM_, unless)
-import qualified Data.HashMap.Strict           as HM
-import           Control.Monad.Catch           (MonadThrow(..), MonadMask(..), try, catch, bracket)
-import           Control.Monad.Reader          (MonadReader)
-import           System.FilePath.Posix         (takeFileName, (<.>))
-import           Data.String.Conv              (toS)
-import           System.Directory              (doesFileExist)
-import qualified Data.HashSet                  as S
-import qualified Data.Vector                   as V
-import           Database.MySQL.Base           as MySQL
-import           Crypto.Hash.SHA256            (hashlazy)
-import           Network.HTTP                  (simpleHTTP, mkRequest, RequestMethod(GET), getResponseBody)
-import           Network.URI                   (parseURI)
+import           Main.Utf8                (withUtf8)
+import           System.IO                (openFile, IOMode(..), hClose)
+import           Data.Aeson               (Value(..), decode, toJSON)
+import           Data.Aeson.Encode.Pretty (encodePretty)
+import qualified Data.ByteString.Lazy     as BSL
+import qualified Data.ByteString          as BS
+import qualified Data.ByteString.Builder  as BS
+import           Data.Maybe               (fromMaybe)
+import qualified Data.Text                as Text
+import qualified Data.Text.IO             as Text
+import           Control.Monad.IO.Class   (MonadIO, liftIO)
+import           Control.Monad            (when, forM_, unless)
+import qualified Data.HashMap.Strict      as HM
+import           Control.Monad.Catch      (MonadThrow(..), MonadMask(..), try, catch, bracket)
+import           Control.Monad.Reader     (MonadReader)
+import           System.FilePath.Posix    (takeFileName, (<.>))
+import           Data.String.Conv         (toS)
+import           System.Directory         (doesFileExist)
+import qualified Data.HashSet             as S
+import qualified Data.Vector              as V
+import           Database.MySQL.Base      as MySQL
+import           Crypto.Hash.SHA256       (hashlazy)
+import           Network.HTTP             (simpleHTTP, mkRequest, RequestMethod(GET), getResponseBody)
+import           Network.URI              (parseURI)
+
 import           Runtime.Types
 import           Runtime.Utils
 import           Runtime.Error
-import           Quickjs                      (JSValue, JSContextPtr, eval_, withJSValue)
-import           Quickjs.Error                (SomeJSRuntimeException)
-import           Schema                       (compileSchema, validate, ValidatorFailure)
-import           Parse.Xlsx                   (readXlsxFile)
-import           Parse.Csv                    (readCsvFile)
+import           Quickjs                  (JSValue, JSContextPtr, eval_, withJSValue)
+import           Quickjs.Error            (SomeJSRuntimeException)
+import           Schema                   (compileSchema, validate, ValidatorFailure)
+import           Parse.Xlsx               (readXlsxFile)
+import           Parse.Csv                (readCsvFile)
 import           DB
-import qualified DB.Postgres                  as Postgres
-import qualified DB.MySQL                     as MySQL
-import           JSON.Utils                   (createAllPathsWithValues, flattenToEAV, getSubjectID)
+import qualified DB.Postgres              as Postgres
+import qualified DB.MySQL                 as MySQL
+import           JSON.Utils               (createAllPathsWithValues, flattenToEAV, getSubjectID)
 
 
 
@@ -242,9 +243,9 @@ processJsonFile rowFun validator fName outputHandle onError terminateOnError = d
   f <- liftIO $ BSL.readFile fName;
   let 
     (rows, hs) = case decode f of
-      Just (Array js) -> (V.toList js, S.toList $ V.foldl' (\acc o -> (S.fromList $ getHeader o) `S.union` acc) S.empty js)
-      Just o -> ([o], getHeader o)
-      Nothing -> ([], [])
+      Just (Array js) -> (js, S.toList $ V.foldl' (\acc o -> (S.fromList $ getHeader o) `S.union` acc) S.empty js)
+      Just o -> (V.singleton o, getHeader o)
+      Nothing -> (V.empty, [])
   
   withJSValue (Object $ HM.fromList $ map (\h -> ("h", toJSON h)) hs) $ \header ->
     processRow rows $ \i r -> do
@@ -302,6 +303,7 @@ processFile rowFun validator fName fType outOpt onError terminateOnError =
           jsonAttrVals <- process DBOutput{..} (ErrorOutput $ if onError == LogToConsole then ConsoleOutput else fromMaybe DBOutput{..} (JSONFileOutput <$> logFileHandle))
           liftIO $ case db_type of 
             Postgres -> do
+              -- if writing to postgres, we run additional cleanup after inserting records into eavs_jsonb
               forM_ (HM.toList jsonAttrVals) $ \(attr,vs) ->
                 Postgres.insertJSONBAttributesValuesMergeOnConflict sourceID attr (toJSON vs) con
               _ <- Postgres.cleanupJSONBAttributesValues con

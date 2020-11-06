@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# Must be compiled with
+# stack build --profile
+
+stack exec --profile -- cv-convert +RTS -p -hc -RTS "$@"
+stack exec -- hp2ps -e8in -c cv-convert.hp
+rm -f cv-convert.aux

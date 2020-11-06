@@ -44,6 +44,7 @@ sheetToValue dataStart sheet =
 
 
 -- | Merge field names with a row of cells, into the contents of a JSON Object
+-- | We also add `{"i" : n}` where `n` is the row number of the current record.
 rowToJSON
   :: Ord k1
   => Row k1 Text -> Text -> Int -> Row k1 CellValue -> [(Text, JSON.Value)]

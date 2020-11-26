@@ -22,7 +22,6 @@ type Row k v = M.Map k v
 type Sheet r c v = M.Map (r, c) v
 
 
-
 readXlsxFile :: MonadIO m => FilePath -> Maybe T.Text -> m (Maybe ([JSON.Value], [JSON.Value]))
 readXlsxFile inFile sheetName = do
     Xlsx{..} <- liftIO $ toXlsx <$> L.readFile inFile
@@ -51,15 +50,18 @@ rowToJSON
 rowToJSON fields i_k i row = (i_k , JSON.Number $ fromIntegral i) : (M.elems $ M.intersectionWith f fields row)
   where f fieldName value = (fieldName, cellValueToValue value)
 
+
 readFieldNames :: Row k Cell -> Row k Text
 readFieldNames cellsX =
   M.mapMaybe (\(c :: Cell) -> case c ^? cellValue . _Just of
     Just (CellText t) -> Just t
     _ -> Nothing) cellsX
 
+
 extractRow :: (Ord k2, Eq a1) => a1 -> Sheet a1 k2 a -> Row k2 a
 extractRow selectedRow =
   M.mapKeys snd . M.filterWithKey (\rc _ -> fst rc == selectedRow)
+
 
 -- Defined Rows are rows which have a value in the first column
 -- Once enough (100) rows that are not defined have been found, we

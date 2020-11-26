@@ -1,5 +1,5 @@
 # cv-convert
-[![Build Status](https://dev.azure.com/sb911/cv-convert-haskell/_apis/build/status/CafeVariomeUoL.cv-convert?branchName=master)](https://dev.azure.com/sb911/cv-convert-haskell/_build/latest?definitionId=1&branchName=master)
+![CI](https://github.com/CafeVariomeUoL/cv-convert/workflows/CI/badge.svg)
 
 Document converter used inside [CafeVariomeCI4](https://github.com/CafeVariomeUoL/CafeVariomeCI4). 
 

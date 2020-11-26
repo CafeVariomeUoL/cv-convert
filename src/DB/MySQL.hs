@@ -26,6 +26,7 @@ insertEAVPrepareQuery uuID (SourceID srcID) (FileID fID) (SubjectID subID) attr 
   "INSERT INTO eavs(uid, source_id, fileName, subject_id, type, attribute, value, elastic) VALUES (?, ?, ?, ?, 'attribute', ?, ?, 0)"
   [MySQLText $ toText uuID, MySQLInt32 $ fromInteger $ toInteger srcID, MySQLInt64 $ fromInteger $ toInteger fID, MySQLText $ pack $ subID, MySQLText attr, MySQLText val]
 
+
 insertError :: SourceID -> FileID -> String -> MySQLConn -> IO ()
 insertError (SourceID srcID) (FileID fID) msg con = execute con
   "INSERT INTO upload_error(source_id, error_id, message, error_code) VALUES (?, ?, ?, 0)"

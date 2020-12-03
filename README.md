@@ -12,7 +12,7 @@ The tool has a command line interface with the following basic usage:
 cv-convert (-i|--input STRING) (-s|--settings STRING) 
            [-o|--output STRING] [--env STRING] [--source-id INT] 
            [--db-config STRING] [--log STRING] [--terminate-on-error] 
-           [-v|--verbose]
+           [--write-record-count] [-v|--verbose]
 ```
 
 The required arguments are `-i` for passing in the path to the input file and `-s` for passing in the path to
@@ -86,6 +86,8 @@ The flag `-o` takes the values:
         elastic boolean DEFAULT false NOT NULL
     );
     ```
+
+The `--write-record-count` flag updates the `record_count` column in `sources`, when writing to the database.
 
 ---
 **NOTE**

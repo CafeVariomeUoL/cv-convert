@@ -12,7 +12,7 @@ Maintainer  : sam@definitelynotspam.email
 
 The runtime module exports the main functionality of the cv-convert tool.
 -}
-module Runtime(SourceID, DataOutputOpt(..), ErrorOpt(..), TerminateOnError(..), FileType(..), SheetName, LibFunctions(..), Settings(..), loadLibrary, fromSpecifiedFileType, processFile, compileSchema) where
+module Runtime(SourceID, DataOutputOpt(..), ErrorOpt(..), TerminateOnError(..), WriteCountToDB(..), FileType(..), SheetName, LibFunctions(..), Settings(..), loadLibrary, fromSpecifiedFileType, processFile, compileSchema) where
 
 import           Main.Utf8                (withUtf8)
 import           System.IO                (openFile, IOMode(..), hClose)
@@ -51,6 +51,7 @@ import           DB
 import qualified DB.Postgres              as Postgres
 import qualified DB.MySQL                 as MySQL
 import           JSON.Utils               (createAllPathsWithValues, flattenToEAV, getSubjectID)
+import Control.Monad (void)
 
 
 
@@ -63,15 +64,15 @@ be of the form
 >Lib.fun2 = ...
 -}
 loadLibrary :: (MonadThrow m, MonadIO m, MonadReader JSContextPtr m) => LibFunctions -> m ()
-loadLibrary (Inline script) = eval_ ("Lib = {};\n" <> script) >> return ()
+loadLibrary (Inline script) = void $ eval_ ("Lib = {};\n" <> script)
 loadLibrary External{..} = do
-  let libPath = (toS hash) <.> "js"
+  let libPath = toS hash <.> "js"
   lib <- liftIO $ doesFileExist libPath >>= \case
     True -> withUtf8 $ BS.readFile libPath
     False ->
       -- get the contents (as a lazy ByteString)
       case parseURI $ toS url of
-        Nothing -> error $ "Not a valid URL " ++ (color blue $ "'" ++ toS url ++ "'") ++ "."
+        Nothing -> error $ "Not a valid URL " ++ color blue ("'" ++ toS url ++ "'") ++ "."
         Just u  -> do
           contents <- simpleHTTP (mkRequest GET u) >>= getResponseBody
           let contents_hash = toS $ BS.toLazyByteString $ BS.byteStringHex $ hashlazy contents
@@ -115,22 +116,22 @@ convertRow :: (MonadReader JSContextPtr m, MonadMask m, MonadIO m) =>
                 -- depending on where we output data
   -> ErrorOutput
   -> TerminateOnError
-  -> m (HM.HashMap Value (S.HashSet Value)) -- ^ returns a map from JSON 'Value's to a set of 'Value's, 
+  -> m (Int, HM.HashMap Value (S.HashSet Value)) -- ^ returns a map from JSON 'Value's to a set of 'Value's, 
                                                     -- by calling 'createAllPathsWithValues' on the converter function output
 convertRow i rowJSON header rowFun validator outputHandle onError terminateOnError = 
   try ((withJSValue rowJSON $ \row -> rowFun row header) `catch` \(e::SomeJSRuntimeException) -> throwM $ JSRuntimeError (show e)) >>= \case
     -- Below, we catch in two stages, to get better errors. Notice the second catch in 
     -- the Right branch has the additional parameter res, which is added to the error
     -- output for easier debugging.
-    Left (e::SomeRuntimeException) -> handleError terminateOnError onError i e rowJSON "" >> return HM.empty
+    Left (e::SomeRuntimeException) -> handleError terminateOnError onError i e rowJSON "" >> return (0, HM.empty)
     Right (Array resMultiple) -> 
       -- if rowFun returns an array of records, we process each one and merge the resulting
       -- jsonAttrVals from each run.
-      ifoldM (\j jsonAttrValsAcc res -> 
+      ifoldM (\j (countAcc, jsonAttrValsAcc) res -> 
         do
-          jsonAttrVals <- process j res
-          return $ HM.unionWith (S.union) jsonAttrVals jsonAttrValsAcc
-        ) HM.empty resMultiple 
+          (c, jsonAttrVals) <- process j res
+          return (countAcc+c, HM.unionWith S.union jsonAttrVals jsonAttrValsAcc)
+        ) (0, HM.empty) resMultiple 
     Right res -> process (0::Int) res
   where
     process j res = do {
@@ -145,19 +146,19 @@ convertRow i rowJSON header rowFun validator outputHandle onError terminateOnErr
           -- flatten record into EAV and insert into the EAV table
           (_,eav) <- flattenToEAV res
           forM_ eav $ \(uuid,attr,val) -> insertEAV uuid sourceID fileID subjectID attr val con
-          return $ createAllPathsWithValues res
+          return (1, createAllPathsWithValues res)
         JSONFileOutput outputFileHandle -> do
           when (i > 0 || j > 0) $ BSL.hPutStr outputFileHandle " , "
           BSL.hPutStr outputFileHandle $ encodePretty res
-          return HM.empty ;
+          return (1, HM.empty) ;
         ConsoleOutput -> do
           putStrLn $ toS $ encodePretty res
-          return HM.empty ;
+          return (1, HM.empty) ;
         SQLFileOutput sourceID outputFileHandle -> do
           (_,eav) <- flattenToEAV res
           forM_ eav $ \(uuid,attr,val) -> BSL.hPutStr outputFileHandle $ toS $ (fromQuery $ MySQL.insertEAVPrepareQuery uuid sourceID (FileID 0) subjectID attr val) <> ";\n"
-          return HM.empty ;
-    } `catch` \(e::SomeRuntimeException) -> handleError terminateOnError onError i e rowJSON res >> return HM.empty
+          return (1, HM.empty) ;
+    } `catch` \(e::SomeRuntimeException) -> handleError terminateOnError onError i e rowJSON res >> return (0, HM.empty)
 
 {-|
 Helper function which loops over the rows of the given input, 
@@ -165,12 +166,12 @@ collecting and merging all the resulting maps (generated inside 'convertRow' via
 -}
 processRow :: (FoldableWithIndex f, MonadThrow m) => 
        f row -- ^ Any list like data structure containing rows we can loop over with an index
-    -> (Int -> row -> m (HM.HashMap Value (S.HashSet Value))) -- ^ Function that consumes the row together with it's index
-    -> m (HM.HashMap Value (S.HashSet Value))
-processRow input m = ifoldM (\i jsonAttrValsAcc l -> do
-    jsonAttrVals <- m i l
-    return $ HM.unionWith (S.union) jsonAttrVals jsonAttrValsAcc
-  ) HM.empty input
+    -> (Int -> row -> m (Int, HM.HashMap Value (S.HashSet Value))) -- ^ Function that consumes the row together with it's index
+    -> m (Int, HM.HashMap Value (S.HashSet Value))
+processRow input m = ifoldM (\i (countAcc, jsonAttrValsAcc) l -> do
+    (count, jsonAttrVals) <- m i l
+    return (count+countAcc, HM.unionWith S.union jsonAttrVals jsonAttrValsAcc)
+  ) (0, HM.empty) input
 
 
 processTxtFile :: (MonadMask m, MonadIO m, MonadReader JSContextPtr m) =>
@@ -181,13 +182,13 @@ processTxtFile :: (MonadMask m, MonadIO m, MonadReader JSContextPtr m) =>
   -> ErrorOutput
   -> TerminateOnError 
   -> Int
-  -> m (HM.HashMap Value (S.HashSet Value))
+  -> m (Int, HM.HashMap Value (S.HashSet Value))
 processTxtFile rowFun validator fName outputHandle onError terminateOnError startFromLine = do
   file <- liftIO $ openFile fName ReadMode
   txt <- liftIO $ Text.hGetContents file
   withJSValue ([("h", "data")] :: [(Text.Text, Text.Text)]) $ \header ->
     processRow (Text.lines txt) $ \i l ->
-      if (i < startFromLine) then return HM.empty
+      if i < startFromLine then return (0, HM.empty)
       else let rowJSON = Object $ HM.fromList [("i" , toJSON i), ("data" , toJSON l)] in 
         convertRow i rowJSON header rowFun validator outputHandle onError terminateOnError
   
@@ -201,7 +202,7 @@ processXlsxFile :: (MonadMask m, MonadIO m, MonadReader JSContextPtr m) =>
   -> ErrorOutput
   -> TerminateOnError 
   -> Maybe SheetName
-  -> m (HM.HashMap Value (S.HashSet Value))
+  -> m (Int, HM.HashMap Value (S.HashSet Value))
 processXlsxFile rowFun validator fName outputHandle onError terminateOnError sheetName = do
   headerRowsMaybe <- readXlsxFile fName (fmap unSheetName sheetName)
   case headerRowsMaybe of
@@ -222,7 +223,7 @@ processCsvFile :: (MonadMask m, MonadIO m, MonadReader JSContextPtr m) =>
   -> DataOutput
   -> ErrorOutput
   -> TerminateOnError 
-  -> m (HM.HashMap Value (S.HashSet Value))
+  -> m (Int, HM.HashMap Value (S.HashSet Value))
 processCsvFile rowFun validator fName outputHandle onError terminateOnError = do
   (h, rows) <- readCsvFile fName
   withJSValue h $ \header ->
@@ -238,7 +239,7 @@ processJsonFile :: (MonadMask m, MonadIO m, MonadReader JSContextPtr m) =>
   -> DataOutput
   -> ErrorOutput
   -> TerminateOnError 
-  -> m (HM.HashMap Value (S.HashSet Value))
+  -> m (Int, HM.HashMap Value (S.HashSet Value))
 processJsonFile rowFun validator fName outputHandle onError terminateOnError = do 
   f <- liftIO $ BSL.readFile fName;
   let 
@@ -272,8 +273,9 @@ processFile :: (MonadMask m, MonadIO m, MonadReader JSContextPtr m) =>
   -> DataOutputOpt
   -> ErrorOpt -- ^ Describes the error behaviour when parsing a row of the input. 
   -> TerminateOnError 
+  -> WriteCountToDB -- ^ Write record count to DB. Assumes that the 
   -> m ()
-processFile rowFun validator fName fType outOpt onError terminateOnError = 
+processFile rowFun validator fName fType outOpt onError terminateOnError writeCount = 
   case outOpt of
     -- if we have db conn info, we will be writing into the db instead of a file
     DBOutputOpt (SomeDBType (db_type :: DBType ty), user, pass, host, port, db) sourceID ->
@@ -292,7 +294,7 @@ processFile rowFun validator fName fType outOpt onError terminateOnError =
           liftIO $ mapM hClose logFileHandle
         ) $
         -- main body function
-        \((con :: ty), logFileHandle) -> do 
+        \(con :: ty, logFileHandle) -> do 
           fileID <- do
             liftIO $ getFileID sourceID (takeFileName fName) con >>= \case
               Just fileID -> do
@@ -300,15 +302,15 @@ processFile rowFun validator fName fType outOpt onError terminateOnError =
                 liftIO $ clearErrors sourceID fileID con
                 return fileID
               Nothing -> throwM $ FileIDNotFound fName
-          jsonAttrVals <- process DBOutput{..} (ErrorOutput $ if onError == LogToConsole then ConsoleOutput else fromMaybe DBOutput{..} (JSONFileOutput <$> logFileHandle))
+          (counts, jsonAttrVals) <- process DBOutput{..} (ErrorOutput $ if onError == LogToConsole then ConsoleOutput else fromMaybe DBOutput{..} (JSONFileOutput <$> logFileHandle))
           liftIO $ case db_type of 
             Postgres -> do
               -- if writing to postgres, we run additional cleanup after inserting records into eavs_jsonb
               forM_ (HM.toList jsonAttrVals) $ \(attr,vs) ->
                 Postgres.insertJSONBAttributesValuesMergeOnConflict sourceID attr (toJSON vs) con
               _ <- Postgres.cleanupJSONBAttributesValues con
-              return ()
-            _ -> pure ()
+              when (unWriteCountToDB writeCount) $ Postgres.updateRecordCount sourceID counts con
+            MySQL -> when (unWriteCountToDB writeCount) $ MySQL.updateRecordCount sourceID counts con
     JSONFileOutputOpt -> 
       bracket
         -- open an output file and write an opening bracket '['
@@ -326,8 +328,7 @@ processFile rowFun validator fName fType outOpt onError terminateOnError =
         ) $
         -- main body
         \(outputFileHandle, logFileHandle) ->
-          process (JSONFileOutput outputFileHandle) (ErrorOutput $ fromMaybe ConsoleOutput $ JSONFileOutput <$> logFileHandle) >>
-          return ()
+          void $ process (JSONFileOutput outputFileHandle) (ErrorOutput $ fromMaybe ConsoleOutput $ JSONFileOutput <$> logFileHandle)
     SQLFileOutputOpt sourceID -> 
       bracket
         -- open an output file 
@@ -345,8 +346,7 @@ processFile rowFun validator fName fType outOpt onError terminateOnError =
         ) $
         -- main body
         \(outputFileHandle, logFileHandle) ->
-          process (SQLFileOutput sourceID outputFileHandle) (ErrorOutput $ fromMaybe ConsoleOutput $ JSONFileOutput <$> logFileHandle) >>
-          return ()
+          void $ process (SQLFileOutput sourceID outputFileHandle) (ErrorOutput $ fromMaybe ConsoleOutput $ JSONFileOutput <$> logFileHandle)
   where
     process outputHandle errorHandling = case fType of
       TXTFile startFromLine -> processTxtFile  rowFun validator fName outputHandle errorHandling terminateOnError startFromLine 

@@ -51,7 +51,8 @@ load_lib = quickjsMultithreaded $ do
 -- @ddl
 CREATE TABLE sources (
     source_id serial primary key,
-    name character varying(30) NOT NULL
+    name character varying(30) NOT NULL,
+    record_count integer NOT NULL DEFAULT 0
 );
 CREATE TABLE eavs (
     id serial primary key,
@@ -113,7 +114,8 @@ makeDatabaseSchemaMySQL :: MySQL.Query
 makeDatabaseSchemaMySQL = [i|
 CREATE TABLE `sources` (
   `source_id` int(11) NOT NULL,
-  `name` varchar(30) NOT NULL
+  `name` varchar(30) NOT NULL,
+  `record_count` bigint(255) NOT NULL DEFAULT '0'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 CREATE TABLE `eavs` (
@@ -230,6 +232,7 @@ testProcessFileWithDB c@(SomeDBType Postgres, user, pass, host, port, db) file f
       (DBOutputOpt c $ SourceID 1)
       LogToDB
       (TerminateOnError False)
+      (WriteCountToDB True)
   bracket (DB.connect @Connection user pass host port db) DB.disconnect $ \con -> do
     res <- selectAllFromEAVS_JSONB (takeFileName file) con
     res @?= expected
@@ -250,6 +253,7 @@ testProcessFileWithDB c@(SomeDBType MySQL, user, pass, host, port, db) file file
       (DBOutputOpt c $ SourceID 1)
       LogToDB
       (TerminateOnError False)
+      (WriteCountToDB True)
   return ()
   where
     rowFun row header = call "rowFun" [row, header]
@@ -297,7 +301,7 @@ testProcessFile inFile rowFunFile = do
       Nothing -> throwM $ InternalError "Invalid Settings file"
       Just Settings{..} -> do
         case compileSchema jsonSchema of
-          Left e -> do
+          Left _ -> do
             throwM $ InternalError "Invalid schema"
           Right validator ->
             return (toS processFunction, libraryFunctions, validator, openAs)
@@ -321,6 +325,7 @@ testProcessFile inFile rowFunFile = do
       JSONFileOutputOpt
       LogToConsole
       (TerminateOnError True)
+      (WriteCountToDB True)
     case res of
       Left (e :: RowError) -> liftIO $ withUtf8 $ writeFile (inFile <.> "out.json") $ show e
       -- in case we want to output RowError as JSON?
@@ -345,7 +350,7 @@ goldenTestsProcessFile = do
 
   return $ testGroup "processFile golden tests"
     [ goldenVsFile
-        (show fileType ++ " - " ++ (strCapitalize $ strReplace "_" " " $ takeBaseName inputFile)) -- test name
+        (show fileType ++ " - " ++ strCapitalize (strReplace "_" " " $ takeBaseName inputFile)) -- test name
         goldenFile -- golden file path
         outputFile
         (testProcessFile ("./test/Runtime/golden" </> inputFile) rowFunFile) -- action whose result is tested

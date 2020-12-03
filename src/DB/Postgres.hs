@@ -22,7 +22,8 @@ module DB.Postgres(
   -- * Misc
   getFileID,
   deleteSourceFromEAVSJSONB,
-  deleteSourceFromEAVSJSONBAttributesValues
+  deleteSourceFromEAVSJSONBAttributesValues,
+  updateRecordCount
 ) where
 import Database.HDBC
 import Database.YeshQL.HDBC
@@ -241,4 +242,11 @@ DELETE FROM eavs_jsonb WHERE source_id = :sourceID
 -- name:deleteSourceFromEAVSJSONBAttributesValues :: ()
 -- :sourceID :: SourceID
 DELETE FROM eavs_jsonb_attributes_values WHERE source_id = :sourceID
+;;;
+
+-- name:updateRecordCount :: ()
+-- :sourceID :: SourceID
+-- :count :: Int
+UPDATE sources SET record_count = record_count + :count WHERE source_id = :sourceID
+
 |]

@@ -149,3 +149,5 @@ newtype ErrorOutput = ErrorOutput DataOutput
 
 
 newtype TerminateOnError = TerminateOnError Bool
+
+newtype WriteCountToDB = WriteCountToDB {unWriteCountToDB :: Bool}

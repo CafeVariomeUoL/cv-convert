@@ -40,6 +40,7 @@ data Options w = Options
   , dbConfig         :: w ::: Maybe String     <?> "DB Connection URI string in the format db_type://user:password@host:port/dbname"
   , log              :: w ::: Maybe String     <?> "Logging ebehaviour, one of console|file|db, defaults to console"
   , terminateOnError :: w ::: Bool             <?> "Terminate when encountering an error. Defaults to false"
+  , writeRecordCount :: w ::: Bool             <?> "Write the number of records added to the database into the 'sources' table"
   , verbose          :: w ::: Bool             <?> "Show verbose error messages."
   }
   deriving (Generic)
@@ -50,6 +51,7 @@ nameMod s
   | s == "dbConfig" = Nothing
   | s == "log" = Nothing
   | s == "terminateOnError" = Nothing
+  | s == "writeRecordCount" = Nothing
   | s == "env" = Nothing
   | otherwise = firstLetter s
 
@@ -146,6 +148,7 @@ cli v = withUtf8 $ do
               outOpt
               errorOpt
               (TerminateOnError terminateOnError)
+              (WriteCountToDB writeRecordCount)
           putStrLn $ color green "✅ Done..."
               
     Nothing -> error "Invalid Settings file."

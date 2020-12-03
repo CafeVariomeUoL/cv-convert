@@ -6,8 +6,8 @@ module DB.MySQL(
   insertError, 
   clearErrors,
   -- * Misc
-  getFileID
-) where
+  getFileID,
+  updateRecordCount) where
 
 import           Database.MySQL.Base
 import qualified System.IO.Streams   as Streams
@@ -56,3 +56,9 @@ getFileID (SourceID sID) nm con = do
     _ -> return Nothing
   skipToEof res
   return output
+
+
+updateRecordCount :: SourceID -> Int -> MySQLConn -> IO ()
+updateRecordCount (SourceID srcID) count con = execute con
+  "UPDATE sources SET record_count = record_count + ? WHERE source_id = ?"
+  [MySQLInt64 $ fromInteger $ toInteger srcID,  MySQLInt64 $ fromInteger $ toInteger count] >> return ()

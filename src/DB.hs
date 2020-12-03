@@ -6,7 +6,7 @@
 
 module DB(DBType(..), SomeDBType(..), SomeDBException(..),
   SourceID(..), SubjectID(..), FileID(..), User(..), Password(..), Host(..), Port(..), Database(..), ConnInfo,
-  DBConn(..), getFileID, insertEAV, insertError, clearErrors,mkConnInfo) where
+  DBConn(..), getFileID, insertEAV, insertError, clearErrors, updateRecordCount, mkConnInfo) where
 
 import           Data.Kind                     (Type)
 import           Database.HDBC.PostgreSQL.Pure (Connection, Config(..))
@@ -92,6 +92,13 @@ clearErrors :: forall con. DBConn con => SourceID -> FileID -> con -> IO ()
 clearErrors sID fID con = case dbType @con of
   Postgres -> Postgres.clearErrors sID fID con
   MySQL -> MySQL.clearErrors sID fID con
+
+
+updateRecordCount :: forall con. DBConn con => SourceID -> Int -> con -> IO ()
+updateRecordCount sID count con = case dbType @con of
+  Postgres -> Postgres.updateRecordCount sID count con
+  MySQL -> MySQL.updateRecordCount sID count con
+
 
 
 type ConnInfo = (SomeDBType, User, Password, Host, Port, Database)
